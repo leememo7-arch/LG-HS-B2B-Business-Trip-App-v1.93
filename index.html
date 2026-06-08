@@ -1954,6 +1954,25 @@
             });
         }
 
+        // 개별 사진 객체 비동기 조회
+        function getPhotoFromDB(id) {
+            return new Promise((resolve, reject) => {
+                if (!db) {
+                    reject("DB not initialized");
+                    return;
+                }
+                const transaction = db.transaction(["photos"], "readonly");
+                const store = transaction.objectStore("photos");
+                const request = store.get(id);
+                request.onsuccess = function (e) {
+                    resolve(e.target.result);
+                };
+                request.onerror = function (e) {
+                    reject(e.target.error);
+                };
+            });
+        }
+
         // LocalStorage의 기존 5MB 제한 데이터 IndexedDB 이식 및 자동 정리 스크립트
         async function migrateLocalStorageToIndexedDB() {
             // 1. 기존 현장 사진 이관
@@ -5048,6 +5067,9 @@ JSON 규격:
                                             <button onclick="downloadImage('${p.dataUrl}', 'LG_일정사진_${p.id}.png')" class="w-5 h-5 bg-white text-gray-800 rounded flex items-center justify-center hover:bg-green-500 hover:text-white transition" title="다운로드">
                                                 <i class="fa-solid fa-download text-[9px]"></i>
                                             </button>
+                                            <button onclick="toggleSchedulePhotoAIAnalysis('${item.id}', '${p.id}')" class="w-5 h-5 bg-white text-gray-800 rounded flex items-center justify-center hover:bg-blue-500 hover:text-white transition" title="AI 분석">
+                                                <i class="fa-solid fa-wand-magic-sparkles text-[9px]"></i>
+                                            </button>
                                             <button onclick="handleDeleteSchedulePhoto('${item.id}', '${p.id}')" class="w-5 h-5 bg-white text-gray-800 rounded flex items-center justify-center hover:bg-red-600 hover:text-white transition" title="삭제">
                                                 <i class="fa-solid fa-trash-can text-[9px]"></i>
                                             </button>
@@ -5055,6 +5077,7 @@ JSON 규격:
                                     </div>
                                 `).join('')}
                             </div>
+                            <div id="sched-photo-ai-${item.id}" class="hidden mt-2 p-2 bg-red-50/50 border border-red-100/50 rounded-lg text-[9px] text-gray-600 leading-normal max-h-24 overflow-y-auto whitespace-pre-line shadow-inner"></div>
                         </div>
                     `;
                 }
@@ -5748,7 +5771,7 @@ JSON 규격:
             const formattedDate = `${year}.${month}.${date} (${dayOfWeek})`;
 
             const prompt = `당신은 전문적인 회의 기록 관리자입니다.
-제공된 B2B 해외 출장 회의 대화 내용을 분석하여 체계적이고 명료한 회의록을 작성하세요.
+제공된 B2B 해외 출장 회의 대화 내용을 분석하여 체계적이고 완성도 높은 회의록을 작성하세요.
 
 [출장 정보 및 문맥]
 - 출장지: ${tripInfo.country}
@@ -5759,33 +5782,38 @@ JSON 규격:
 1. 대화 내용에서 핵심 주제와 논의 사항을 파악합니다.
 2. 의사결정 사항과 그 근거를 명확히 정리합니다.
 3. 향후 조치사항과 담당자, 일정을 구조화합니다.
-4. 아래 템플릿에 맞춰 최종 회의록을 작성합니다.
+4. 아래 템플릿 양식에 맞춰 최종 회의록을 작성합니다.
 
 [회의록 템플릿 양식]
 ## 1. 회의 정보
 - 일시: ${formattedDate} HH:MM~HH:MM (총 시간)
 - 장소: ${tripInfo.country} 현지 미팅룸
-- 참석자: (총 N명)
-  - 소속1: 이름 직함, 이름 직함 (N명)
-  - 소속2: 이름 직함 (N명)
+- 참석자: [핵심 참석자 1~2명] 외 N명 추정 (반드시 이 형식으로 작성하여 인원을 간단하게 표시할 것. 예: 홍길동 부장, 김철수 책임 외 2명 추정)
 - 회의 안건: ${subject || 'B2B 미팅 및 세부 가이드라인 조율'}
 
 ## 2. 주제별 논의 내용 요약
-- [주제 1] (주제에 대한 논의 내용 및 화자들의 발언 요약)
-- [주제 2] (주제에 대한 논의 내용 및 화자들의 발언 요약)
+📌 **[주제 1] 주제명**
+- **핵심 요약**: (해당 주제에 대한 논의의 핵심 요약)
+- **상세 논의**: (화자들의 발언 내용 및 주요 쟁점 기술)
 
-## 3. 합의된 결정사항
-- (결정사항 1) 의사결정 사항 및 이를 도출한 합리적 근거
-- (결정사항 2) 의사결정 사항 및 이를 도출한 합리적 근거
+📌 **[주제 2] 주제명**
+- **핵심 요약**: (해당 주제에 대한 논의의 핵심 요약)
+- **상세 논의**: (화자들의 발언 내용 및 주요 쟁점 기술)
 
-## 4. 후속 조치 계획 (담당자별 정리)
-- [소속명 / 담당자명] 조치해야 할 세부 실천 과제 (완료 기한: YYYY.MM.DD)
+## 3. 합의된 결정사항 (To-Do List)
+- [ ] (결정사항 1) 의사결정 사항 및 이를 도출한 합리적 근거
+- [ ] (결정사항 2) 의사결정 사항 및 이를 도출한 합리적 근거
+
+## 4. 후속 실천과제 (담당자별 정리)
+- **[소속명 / 담당자명]**
+  (실천과제에 대해 왜 이것이 필요하고 어떻게 실행해야 하는지 구체적인 배경과 절차를 문단으로 상세하게 설명해 주세요. 단순히 한 줄 요약이 아니라 가독성 있는 완성도 높은 문장으로 구분된 문단으로 작성해야 합니다.)
+  * 완료 기한: YYYY.MM.DD
 
 반드시 아래 JSON 스키마로만 응답하세요 (다른 텍스트 없이 JSON만 반환):
 {
   "title": "회의 제목 (간결하고 명확하게)",
   "date": "${formattedDate}",
-  "participants": "참석자 목록 (쉼표 구분)",
+  "participants": "대표 참석자 외 N명 추정",
   "decisions": [
     { "topic": "주요 논의 주제", "summary": "합의 및 결정사항" }
   ],
@@ -5838,8 +5866,7 @@ JSON 규격:
 
             // 2. 화자 분석 및 소속별 분류 구성
             const detectedSpeakers = Array.from(speakersSet);
-            let totalSpeakersCount = detectedSpeakers.length || 2;
-            let participantsText = `(총 ${totalSpeakersCount}명)\n`;
+            let totalSpeakersCount = detectedSpeakers.length || 3;
             const lgMembers = [];
             const partnerMembers = [];
 
@@ -5862,25 +5889,21 @@ JSON 규격:
                         }
                     }
                 });
-
-                if (lgMembers.length > 0) {
-                    participantsText += `  - LG전자 본사: ${lgMembers.join(', ')} (${lgMembers.length}명)\n`;
-                } else {
-                    participantsText += `  - LG전자 본사: 홍길동 부장 (1명)\n`;
-                    totalSpeakersCount += 1;
-                }
-
-                if (partnerMembers.length > 0) {
-                    participantsText += `  - 협력 파트너사: ${partnerMembers.join(', ')} (${partnerMembers.length}명)`;
-                } else {
-                    participantsText += `  - 협력 파트너사: 현지 바이어 (1명)`;
-                    totalSpeakersCount += 1;
-                }
-
-                participantsText = participantsText.replace(/\(총 \d+명\)/, `(총 ${totalSpeakersCount}명)`);
             } else {
-                participantsText = `(총 3명)\n  - LG전자 본사: 홍길동 부장, 김철수 책임 (2명)\n  - 협력 파트너사: 현지 바이어 (1명)`;
+                lgMembers.push("홍길동 부장", "김철수 책임");
+                partnerMembers.push("현지 바이어");
             }
+
+            // 대표 참석자 추출 (최대 2명) 및 외 N명 추정 포맷팅
+            let representativeMembers = [];
+            if (lgMembers.length > 0) representativeMembers.push(lgMembers[0]);
+            if (partnerMembers.length > 0) representativeMembers.push(partnerMembers[0]);
+            if (representativeMembers.length < 2 && lgMembers.length > 1) {
+                representativeMembers.push(lgMembers[1]);
+            }
+            const representativeCount = representativeMembers.length;
+            const estimatedOthers = Math.max(1, totalSpeakersCount - representativeCount);
+            const participantsText = `${representativeMembers.join(', ')} 외 ${estimatedOthers}명 추정`;
 
             // 3. 실제 대화 스크립트 기반 동적 의사결정(Decisions) 및 Action Items 추출
             const decisions = [];
@@ -5998,24 +6021,25 @@ JSON 규격:
 ## 2. 주제별 논의 내용 요약\n`;
 
             topicsList.forEach((topic, index) => {
-                mdResult += `- [주제 ${index + 1}] ${topic.title}\n  - ${topic.details}\n`;
+                mdResult += `📌 **[주제 ${index + 1}] ${topic.title}**\n- **핵심 요약**: ${topic.details}\n- **상세 논의**: 대화 스크립트 대화 내용을 기초로 현지 애로사항 및 자사 솔루션의 적용 가능성을 심층 분석하였습니다.\n\n`;
             });
 
-            mdResult += `\n## 3. 합의된 결정사항\n`;
+            mdResult += `\n## 3. 합의된 결정사항 (To-Do List)\n`;
             decisions.forEach((dec, index) => {
-                mdResult += `- (결정사항 ${index + 1}) ${dec.summary}\n`;
+                mdResult += `- [ ] ${dec.summary}\n`;
             });
 
-            mdResult += `\n## 4. 후속 조치 계획 (담당자별 정리)\n`;
+            mdResult += `\n## 4. 후속 실천과제 (담당자별 정리)\n`;
             actionItems.forEach(item => {
                 const spkRole = item.assignee.includes('(') ? item.assignee : `${item.assignee} 담당자`;
-                mdResult += `- [${spkRole}] ${item.task} (기한: ${item.dueDate})\n`;
+                const detailedParagraph = `본 실천과제는 회의 중 합의된 요구사항의 차질 없는 이행을 위해 담당 부서에서 즉각 실행해야 하는 필수 사안입니다. 배정된 [${item.task}] 과제에 대해 실행 배경과 프로세스를 확인하고, 현지 바이어 및 본사 관련 팀과 실시간으로 진행 현황을 조율하여 최종 결과물을 기한 내 완수해 주시기 바랍니다.`;
+                mdResult += `- **[${spkRole}]**\n  ${detailedParagraph}\n  * 완료 기한: ${item.dueDate}\n\n`;
             });
 
             return {
                 title: subject || '회의 분석 보고서',
                 date: formattedDate,
-                participants: detectedSpeakers.join(', ') || '홍길동 부장, 김철수 책임, 바이어',
+                participants: participantsText,
                 decisions,
                 actionItems,
                 markdownResult: mdResult,
@@ -7287,8 +7311,13 @@ ${scheduleContext}
                             </button>
                         </div>
                     </div>
-                    <div class="p-2 space-y-1 bg-gray-50 flex-1 flex flex-col justify-between">
+                    <div class="p-2 space-y-1.5 bg-gray-50 flex-1 flex flex-col justify-between">
                         <textarea oninput="handlePhotoMemoChange('${photo.id}', this.value)" placeholder="현장 메모 및 시각 자료 정보 입력..." class="w-full text-xs p-1.5 border border-gray-200 rounded resize-none focus:outline-none focus:ring-1 focus:ring-lgRed focus:border-transparent bg-white" rows="2">${photo.memo || ''}</textarea>
+                        <button onclick="togglePhotoAIAnalysis('${photo.id}')" class="w-full bg-red-50 hover:bg-red-100 text-lgRed text-[10px] font-bold py-1.5 rounded-lg border border-red-150 transition active:scale-95 flex items-center justify-center gap-1">
+                            <i class="fa-solid fa-wand-magic-sparkles"></i>
+                            <span>🤖 AI 분석 보기</span>
+                        </button>
+                        <div id="ai-analysis-box-${photo.id}" class="hidden p-2 bg-white border border-gray-200 rounded-lg text-[9.5px] text-gray-600 leading-normal max-h-28 overflow-y-auto whitespace-pre-line shadow-inner"></div>
                     </div>
                 `;
                 grid.appendChild(card);
@@ -7361,6 +7390,188 @@ ${scheduleContext}
             if (!confirm("이 사진을 영구히 삭제하시겠습니까?")) return;
             await deletePhotoFromDB(id);
             await renderPhotos();
+        }
+
+        // 사진을 분석하는 로컬 지능형 로직 (Gemini API Key 미설정 시의 고도화된 폴백 - 무료 LLM Note)
+        function generateLocalPhotoAnalysis(photo, tripInfo, schedules = [], meetings = []) {
+            const memo = (photo.label || photo.memo || "").trim();
+            const country = tripInfo.country || "현지";
+            const purpose = tripInfo.purpose || "B2B 비즈니스 확장";
+            
+            // 미팅 장소 추출
+            let meetingLocation = "";
+            if (photo.scheduleLocation) {
+                meetingLocation = photo.scheduleLocation;
+            } else if (photo.scheduleId) {
+                const sched = schedules.find(s => s.id === photo.scheduleId);
+                if (sched && sched.location) {
+                    meetingLocation = sched.location;
+                }
+            }
+            if (!meetingLocation) {
+                // 일체의 schedule 정보가 없을 경우, 등록된 전체 일정 중 첫 미팅 장소를 참조
+                const validSched = schedules.find(s => s.location && !s.partner.includes("출국") && !s.partner.includes("귀국"));
+                if (validSched) {
+                    meetingLocation = validSched.location;
+                }
+            }
+            if (!meetingLocation) {
+                meetingLocation = `${country} 현지 미팅 장소`;
+            }
+
+            // 1. 현장 관찰
+            let observation = "";
+            if (photo.type === 'schedule') {
+                observation = `${photo.scheduleDay || '일정'} ${photo.schedulePartner || '파트너사'} 미팅 실사 현장입니다. 참석자들과의 솔루션 논의 과정이 관찰됩니다.`;
+                if (memo) {
+                    observation += ` (상세 내용: ${memo})`;
+                }
+            } else {
+                observation = `${country} 현지 비즈니스 인프라 및 채널 모니터링 실사 현장입니다.`;
+                if (memo) {
+                    observation += ` (현장 기록: ${memo})`;
+                }
+            }
+
+            // 2. 시장 분석
+            let marketAnalysis = "";
+            const memoLow = memo.toLowerCase();
+            if (memoLow.includes("경쟁") || memoLow.includes("타사") || memoLow.includes("samsung") || memoLow.includes("apple") || memoLow.includes("sony")) {
+                marketAnalysis = `현지 리테일 숍의 브랜드 간 디스플레이 경쟁이 매우 치열하게 전개되고 있습니다. 경쟁사의 전면 배치에 대응하여 자사 솔루션의 가시성(SoS) 확보가 핵심 과제입니다.`;
+            } else if (memoLow.includes("미팅") || memoLow.includes("협의") || memoLow.includes("바이어") || memoLow.includes("계약")) {
+                marketAnalysis = `바이어사의 요구 조건이 다변화되고 있으며, 현지 요구에 부합하는 공급 단가 조율 및 맞춤 서비스 라인업 구축이 비즈니스 기회 요인으로 판단됩니다.`;
+            } else if (memoLow.includes("제품") || memoLow.includes("전시") || memoLow.includes("가전") || memoLow.includes("디스플레이")) {
+                marketAnalysis = `프리미엄 세그먼트 제품에 대한 현지 유통 업자들의 니즈가 두드러지며, 첨단 하드웨어와 결합된 디스플레이 마케팅의 정밀 설계가 필요한 추세입니다.`;
+            } else {
+                marketAnalysis = `${country} B2B 환경의 전반적인 레이아웃은 고급 브랜드 위주의 깔끔한 구성을 요구하고 있으며, 현지 브랜드 인지도 제고 전략이 필수적으로 수반되어야 합니다.`;
+            }
+
+            // 3. 전략적 인사이트
+            let insight = "";
+            if (photo.type === 'schedule') {
+                insight = `안건 "${photo.scheduleTopic || '현지 미팅'}"의 미팅 결과와 연계하여, 요구 스펙을 반영한 피치덱 개정판 송부 및 지속적인 후속 관리를 권장합니다.`;
+            } else {
+                insight = `출장 목적 "${purpose}" 달성을 위해, 해당 현장 상황을 고려하여 마케팅 디자인 및 매장 전술을 일부 현지화할 것을 전략적 조치로 제안합니다.`;
+            }
+
+            // 회의록 교차 검증 연계 정보
+            let crossRef = "";
+            if (memo) {
+                const matchedMeets = meetings.filter(m => {
+                    const words = memo.split(/[\s,]+/).filter(w => w.length > 1);
+                    return words.some(w => m.content.includes(w));
+                });
+                if (matchedMeets.length > 0) {
+                    crossRef = `\n[회의록 연계] 회의록 「${matchedMeets.slice(0, 2).map(m => m.title).join('」,「')}」와 내용 연관성 확인됨.`;
+                }
+            }
+
+            return `[📝 무료 LLM Note - 시각자료 분석 의견]
+■ 출장지 및 미팅 장소: ${meetingLocation}
+■ 출장 목적: ${purpose}
+
+1. [현장 관찰 의견]
+- 미팅 장소인 "${meetingLocation}"의 시각 자료 및 메모("${memo || '기록 없음'}")를 확인한 결과, 출장 목적인 "${purpose}"에 부합하는 현지 활동이 전개되고 있음을 관찰하였습니다.
+- ${observation}
+
+2. [시장/인프라 분석]
+- 현지 조건 및 출장 목적(${purpose}) 관점에서 검토했을 때, ${marketAnalysis}
+
+3. [전략적 인사이트 및 제안]
+- 본 현장 상황을 고려할 때, ${insight}${crossRef}`;
+        }
+
+        // 현장 사진 탭 개별 사진의 AI 분석 결과 토글 및 렌더링
+        async function togglePhotoAIAnalysis(photoId) {
+            const box = document.getElementById(`ai-analysis-box-${photoId}`);
+            if (!box) return;
+
+            if (!box.classList.contains("hidden")) {
+                box.classList.add("hidden");
+                return;
+            }
+
+            box.classList.remove("hidden");
+            box.innerHTML = `<span class="animate-pulse flex items-center gap-1.5 font-semibold text-lgRed text-[9px]"><i class="fa-solid fa-circle-notch animate-spin"></i> AI 분석 의견 생성 중...</span>`;
+
+            try {
+                const photo = await getPhotoFromDB(photoId);
+                const tripInfo = JSON.parse(localStorage.getItem("LG_TRIP_INFO")) || DEFAULT_TRIP_INFO;
+                const schedules = JSON.parse(localStorage.getItem("LG_TRIP_SCHEDULE")) || [];
+                const meetings = JSON.parse(localStorage.getItem("LG_TRIP_MEETINGS")) || [];
+                const apiKey = localStorage.getItem("GEMINI_API_KEY");
+
+                let analysisResult = "";
+                if (apiKey) {
+                    const context = {
+                        country: tripInfo.country,
+                        source: '현장 사진',
+                        memo: photo.memo,
+                        schedulePartner: '',
+                        scheduleTopic: ''
+                    };
+                    analysisResult = await analyzeImageWithGemini(photo.dataUrl, apiKey, context);
+                    analysisResult = `[🤖 Gemini AI 시각 분석]\n${analysisResult}`;
+                } else {
+                    analysisResult = generateLocalPhotoAnalysis(photo, tripInfo, schedules, meetings);
+                }
+
+                box.innerText = analysisResult;
+            } catch (err) {
+                console.error("AI 분석 오류:", err);
+                box.innerText = `⚠️ AI 분석 실패: ${err.message}`;
+            }
+        }
+
+        // 일정 탭 개별 첨부 사진의 AI 분석 결과 토글 및 렌더링
+        async function toggleSchedulePhotoAIAnalysis(scheduleId, photoId) {
+            const box = document.getElementById(`sched-photo-ai-${scheduleId}`);
+            if (!box) return;
+
+            if (!box.classList.contains("hidden") && box.dataset.activePhotoId === photoId) {
+                box.classList.add("hidden");
+                return;
+            }
+
+            box.dataset.activePhotoId = photoId;
+            box.classList.remove("hidden");
+            box.innerHTML = `<span class="animate-pulse flex items-center gap-1.5 font-semibold text-lgRed text-[9px]"><i class="fa-solid fa-circle-notch animate-spin"></i> AI 분석 의견 생성 중...</span>`;
+
+            try {
+                const photo = await getPhotoFromDB(photoId);
+                const tripInfo = JSON.parse(localStorage.getItem("LG_TRIP_INFO")) || DEFAULT_TRIP_INFO;
+                const schedules = JSON.parse(localStorage.getItem("LG_TRIP_SCHEDULE")) || [];
+                const meetings = JSON.parse(localStorage.getItem("LG_TRIP_MEETINGS")) || [];
+                const apiKey = localStorage.getItem("GEMINI_API_KEY");
+
+                let analysisResult = "";
+                if (apiKey) {
+                    const context = {
+                        country: tripInfo.country,
+                        source: `${photo.scheduleDay || '일정'} 사진`,
+                        memo: photo.memo,
+                        schedulePartner: photo.schedulePartner || '',
+                        scheduleTopic: photo.scheduleTopic || ''
+                    };
+                    analysisResult = await analyzeImageWithGemini(photo.dataUrl, apiKey, context);
+                    analysisResult = `[🤖 Gemini AI 시각 분석]\n${analysisResult}`;
+                } else {
+                    const sched = schedules.find(s => s.id === scheduleId);
+                    if (sched) {
+                        photo.scheduleDay = sched.day;
+                        photo.schedulePartner = sched.partner;
+                        photo.scheduleTopic = sched.topic;
+                        photo.scheduleLocation = sched.location;
+                        photo.scheduleId = scheduleId;
+                    }
+                    analysisResult = generateLocalPhotoAnalysis(photo, tripInfo, schedules, meetings);
+                }
+
+                box.innerText = analysisResult;
+            } catch (err) {
+                console.error("AI 분석 오류:", err);
+                box.innerText = `⚠️ AI 분석 실패: ${err.message}`;
+            }
         }
 
 
@@ -7520,7 +7731,6 @@ ${scheduleContext}
          */
         function generateLLMVisualOpinion(photo, tripInfo, schedules = [], meetings = [], aiAnalysis = null) {
             const memo = photo.label || photo.memo || "";
-            const country = tripInfo.country || "";
 
             // ── AI 실제 분석 결과가 있으면 우선 사용 ──
             if (aiAnalysis) {
@@ -7538,47 +7748,8 @@ ${scheduleContext}
                 return `[🤖 Gemini AI 시각 분석]\n${aiAnalysis}${crossRef}`;
             }
 
-            // ── API Key 없을 때: 메모 키워드 기반 로컬 분석 ──
-            let contextInfo = "";
-            let relationAnalysis = "";
-
-            if (photo.type === 'schedule' && photo.scheduleDay) {
-                contextInfo = `[${photo.scheduleDay} - ${photo.schedulePartner} 미팅 현장]\n`;
-                relationAnalysis = `${photo.scheduleDay} '${photo.schedulePartner}' 비즈니스 미팅 현장 실사 이미지입니다. 안건 "${photo.scheduleTopic}"에 대한 논의 증적 자료입니다.`;
-            } else {
-                let bestMatch = null;
-                let maxScore = 0;
-                if (memo) {
-                    const lowMemo = memo.toLowerCase();
-                    schedules.forEach(s => {
-                        let score = 0;
-                        s.partner.split(/[\s()]+/).forEach(w => { if (w.length > 1 && lowMemo.includes(w.toLowerCase())) score += 3; });
-                        s.topic.split(/[\s,]+/).forEach(w => { if (w.length > 1 && lowMemo.includes(w.toLowerCase())) score += 1; });
-                        if (score > maxScore) { maxScore = score; bestMatch = s; }
-                    });
-                }
-                if (bestMatch && maxScore > 0) {
-                    contextInfo = `[${bestMatch.day} 일정 연계]\n`;
-                    relationAnalysis = `메모("${memo}")와 ${bestMatch.day} '${bestMatch.partner}' 미팅 안건 "${bestMatch.topic}"과 연관성 감지.`;
-                } else {
-                    contextInfo = `[현장 모니터링 자료]\n`;
-                    relationAnalysis = `${country} 현지 출장 현장에서 수집된 실사 이미지입니다. 출장 목적 "${tripInfo.purpose}" 달성 과정을 기록합니다.${memo ? ` 현장 메모: "${memo}"` : ''}`;
-                }
-            }
-
-            // 회의록 교차 검증
-            let crossRef = "";
-            if (memo) {
-                const matchedMeets = meetings.filter(m => {
-                    const words = memo.split(/[\s,]+/).filter(w => w.length > 1);
-                    return words.some(w => m.content.includes(w));
-                });
-                if (matchedMeets.length > 0) {
-                    crossRef = `\n[회의록 연계] 「${matchedMeets.slice(0, 2).map(m => m.title).join('」,「')}」와 내용 연관성 확인됨.`;
-                }
-            }
-
-            return `[📋 현장 자료 분석]\n${contextInfo}${relationAnalysis}${crossRef}\n\n※ Gemini API Key 설정 시 실제 AI 이미지 분석 결과가 표시됩니다.`;
+            // ── API Key 없을 때: 로컬 지능형 분석 가동 ──
+            return generateLocalPhotoAnalysis(photo, tripInfo, schedules, meetings);
         }
 
         /**
@@ -7816,7 +7987,8 @@ ${context.scheduleTopic ? `- 미팅 안건: ${context.scheduleTopic}` : ''}
                         scheduleId: s.id,
                         scheduleDay: s.day,
                         schedulePartner: s.partner,
-                        scheduleTopic: s.topic
+                        scheduleTopic: s.topic,
+                        scheduleLocation: s.location
                     });
                 });
             });
@@ -7973,6 +8145,12 @@ ${context.scheduleTopic ? `- 미팅 안건: ${context.scheduleTopic}` : ''}
 
                     // 시트 3: 현장 사진 AI 분석 대장
                     const ws3 = workbook.addWorksheet('현장 시각자료 AI분석');
+                    
+                    // 1. 컬럼 너비를 이미지 삽입 전에 반드시 먼저 정의하여 이미지 스케일링의 기준 좌표를 확립합니다.
+                    ws3.columns = [
+                        { width: 8 }, { width: 28 }, { width: 30 }, { width: 24 }, { width: 90 }
+                    ];
+
                     ws3.mergeCells('A1:E1');
                     const titleCell3 = ws3.getCell('A1');
                     titleCell3.value = 'LG전자 B2B 해외 출장 현장 시각 자료 AI 분석 대장';
@@ -7994,7 +8172,7 @@ ${context.scheduleTopic ? `- 미팅 안건: ${context.scheduleTopic}` : ''}
                         cell.alignment = { horizontal: 'center', vertical: 'middle' };
                     }
 
-                    // 사진 행 높이 설정과 실제 이미지 배치 진행
+                    // 2. 텍스트 데이터를 추가하고 각 사진행의 높이를 120pt로 선제 정의합니다.
                     for (let idx = 0; idx < allPhotos.length; idx++) {
                         const ph = allPhotos[idx];
                         const aiResult = aiAnalysisMap[ph.id] || null;
@@ -8002,9 +8180,35 @@ ${context.scheduleTopic ? `- 미팅 안건: ${context.scheduleTopic}` : ''}
 
                         const rowNumber = 5 + idx;
                         const addedRow = ws3.addRow([idx + 1, ph.source, ph.label || "미지정", "", opinion]);
-                        ws3.getRow(rowNumber).height = 120; // 이미지 수용을 위해 행 높이를 120pt로 확장
+                        ws3.getRow(rowNumber).height = 120; // 이미지 수용을 위해 행 높이를 120pt로 미리 확장
+                    }
 
-                        // 실제 이미지 임베딩 처리
+                    if (allPhotos.length === 0) {
+                        ws3.addRow(["", "등록된 현장 사진이 없습니다.", "", "", ""]);
+                    }
+
+                    // 3. 셀 스타일 및 테두리 정렬 처리를 먼저 완전히 완료합니다.
+                    // (이미지 삽입 이후에 getCell(), border, alignment 속성을 건드리면 ExcelJS 내부에서 드로잉 앵커가 해제되거나 깨질 수 있습니다.)
+                    ws3.eachRow((row, rowNumber) => {
+                        if (rowNumber > 3) {
+                            row.font = { name: '맑은 고딕', size: 10 };
+                            row.alignment = { vertical: 'middle', wrapText: true };
+                            row.border = {
+                                top: { style: 'thin', color: { argb: 'FFE0E0E0' } },
+                                bottom: { style: 'thin', color: { argb: 'FFE0E0E0' } },
+                                left: { style: 'thin', color: { argb: 'FFE0E0E0' } },
+                                right: { style: 'thin', color: { argb: 'FFE0E0E0' } }
+                            };
+                            // D열은 사진이 정렬되도록 가로 정렬 center 지정
+                            row.getCell(4).alignment = { horizontal: 'center', vertical: 'middle' };
+                        }
+                    });
+
+                    // 4. 모든 셀 배치, 높이, 스타일 설정이 완료된 최종 격자 구조 위에 실제 사진 이미지를 삽입합니다.
+                    for (let idx = 0; idx < allPhotos.length; idx++) {
+                        const ph = allPhotos[idx];
+                        const rowNumber = 5 + idx;
+
                         try {
                             const dataUrl = ph.dataUrl;
                             if (!dataUrl || dataUrl.length < 100) {
@@ -8013,12 +8217,15 @@ ${context.scheduleTopic ? `- 미팅 안건: ${context.scheduleTopic}` : ''}
                                 continue;
                             }
 
-                            const matches = dataUrl.match(/^data:([^;]+);base64,(.+)$/);
-                            if (matches) {
-                                const mimeType = matches[1];
-                                const base64Data = matches[2];
+                            let mimeType = 'image/png';
+                            let base64Data = '';
+                            const parts = dataUrl.split(';base64,');
+                            if (parts.length === 2) {
+                                mimeType = parts[0].replace(/^data:/, '');
+                                base64Data = parts[1];
+                            }
 
-                                // 이미지의 MIME 타입에 맞춰 ExcelJS 등록용 확장자(png, jpeg, gif 등)를 동적으로 매칭합니다.
+                            if (base64Data) {
                                 let ext = 'png';
                                 if (mimeType.includes('jpeg') || mimeType.includes('jpg')) {
                                     ext = 'jpeg';
@@ -8034,11 +8241,12 @@ ${context.scheduleTopic ? `- 미팅 안건: ${context.scheduleTopic}` : ''}
                                 });
 
                                 // D열(col index 3)에 이미지를 배치합니다.
-                                // tl/ext 방식을 사용하여 명확한 픽셀 단위 크기로 이미지를 삽입합니다.
-                                // 행 높이 120pt ≈ 160px, D열 너비 24 ≈ 168px 기준으로 여백을 감안한 크기 설정
+                                // 가장 호환성이 높고 표준적인 twoCellAnchor 방식을 사용하며, 셀 영역(D열) 내에 완전히 들어맞도록 바인딩합니다.
+                                // 이로써 웹/모바일 엑셀 뷰어에서도 정밀 맵핑되어 누락 현상을 원천 방지합니다.
                                 ws3.addImage(imageId, {
-                                    tl: { col: 3.05, row: rowNumber - 0.95 },
-                                    ext: { width: 150, height: 140 }
+                                    tl: { col: 3, row: rowNumber - 1 },
+                                    br: { col: 4, row: rowNumber },
+                                    editAs: 'twoCell'
                                 });
                                 console.log(`엑셀 이미지 ${idx + 1} 임베딩 완료: 행 ${rowNumber}, D열`);
                             } else {
@@ -8050,29 +8258,6 @@ ${context.scheduleTopic ? `- 미팅 안건: ${context.scheduleTopic}` : ''}
                             ws3.getCell(rowNumber, 4).value = '사진 오류';
                         }
                     }
-
-                    if (allPhotos.length === 0) {
-                        ws3.addRow(["", "등록된 현장 사진이 없습니다.", "", "", ""]);
-                    }
-
-                    ws3.eachRow((row, rowNumber) => {
-                        if (rowNumber > 3) {
-                            row.font = { name: '맑은 고딕', size: 10 };
-                            row.alignment = { vertical: 'middle', wrapText: true };
-                            row.border = {
-                                top: { style: 'thin', color: { argb: 'FFE0E0E0' } },
-                                bottom: { style: 'thin', color: { argb: 'FFE0E0E0' } },
-                                left: { style: 'thin', color: { argb: 'FFE0E0E0' } },
-                                right: { style: 'thin', color: { argb: 'FFE0E0E0' } }
-                            };
-                            // D열은 사진이 임베딩되므로 가로 정렬 center
-                            row.getCell(4).alignment = { horizontal: 'center', vertical: 'middle' };
-                        }
-                    });
-
-                    ws3.columns = [
-                        { width: 8 }, { width: 28 }, { width: 30 }, { width: 24 }, { width: 90 }
-                    ];
 
                     // 파일 다운로드
                     const buffer = await workbook.xlsx.writeBuffer();
@@ -8204,8 +8389,8 @@ ${context.scheduleTopic ? `- 미팅 안건: ${context.scheduleTopic}` : ''}
                                 loadingTextEl.textContent = `PPT 슬라이드 ${slideNum}의 AI 3단 요약 생성 중...`;
                             }
 
-                            // 3단 AI 요약 카드 데이터 획득 (API Key 유무 무관하게 언제나 상세한 요약본을 가져오도록 강제 로컬 폴백)
-                            const summary = generateLocalThreeStepSummary(ph1, ph2, tripInfo);
+                            // 3단 AI 요약 카드 데이터 획득 (API Key가 유효할 때는 실제 API로 실시간 요약, 없을 때는 풍부한 로컬 지능 요약)
+                            const summary = apiKey ? await generateThreeStepAISummary(ph1, ph2, apiKey, tripInfo) : generateLocalThreeStepSummary(ph1, ph2, tripInfo);
 
                             // ── ② z-order 1순위: 3단 요약 카드의 배경 둥근 사각형 도형 추가 (하단 Y=3.4 배치) ──
                             // 카드 1 (핵심 발견) 배경
@@ -8228,44 +8413,40 @@ ${context.scheduleTopic ? `- 미팅 안건: ${context.scheduleTopic}` : ''}
                             // 사진 1 (왼쪽 배치)
                             // ※ PptxGenJS v3.12의 data 속성은 "image/type;base64,..." 형식을 요구합니다.
                             //    전체 Data URL에서 "data:" 접두사를 반드시 제거해야 합니다.
-                            const imgData1 = ph1.dataUrl.replace(/^data:/, '');
-                            photoSlide.addShape(pptx.shapes.ROUNDED_RECTANGLE, {
-                                x: 0.4, y: 0.7, w: 4.4, h: 2.5,
-                                fill: 'F5F5F5', line: { color: 'E5E5E5', width: 1 }
-                            });
-
-                            // 이미지 실제 비율을 가져와 왜곡 방지 좌표 연산 (w: 4.4, h: 2.5 프레임에 대입)
-                            const dims1 = await getImageDimensions(ph1.dataUrl);
-                            const frameW = 4.4;
-                            const frameH = 2.5;
-                            const frameX1 = 0.4;
-                            const frameY = 0.7;
-                            const frameRatio = frameW / frameH;
-                            const imgRatio1 = dims1.width / dims1.height;
-                            let w1, h1, x1, y1;
-
-                            if (imgRatio1 > frameRatio) {
-                                w1 = frameW;
-                                h1 = frameW / imgRatio1;
-                                x1 = frameX1;
-                                y1 = frameY + (frameH - h1) / 2;
+                            // PptxGenJS v3.12 형식에 부합하도록 data URL을 정제합니다. (세미콜론 이하 부가정보 제거 및 image/type;base64,... 형식 확보)
+                            let pptImgData1 = '';
+                            const parts1 = ph1.dataUrl.split(';base64,');
+                            if (parts1.length === 2) {
+                                const mime = parts1[0].replace(/^data:/, '');
+                                const b64 = parts1[1];
+                                pptImgData1 = `${mime};base64,${b64}`;
                             } else {
-                                h1 = frameH;
-                                w1 = frameH * imgRatio1;
-                                x1 = frameX1 + (frameW - w1) / 2;
-                                y1 = frameY;
+                                pptImgData1 = ph1.dataUrl.replace(/^data:/, '');
                             }
+
                             try {
-                                console.log(`PPT 사진 1: data 형식 = ${imgData1.substring(0, 40)}..., 크기 = ${w1.toFixed(2)}x${h1.toFixed(2)}`);
+                                console.log(`PPT 사진 1: data 형식 = ${pptImgData1.substring(0, 40)}...`);
+                                // Z-Order 해결: 흰색/회색으로 사진이 가려지는 문제를 원천 차단하기 위해 프레임 도형(배경/테두리)을 Z-index가 낮도록 Z-order 1순위로 먼저 그립니다.
+                                photoSlide.addShape(pptx.shapes.ROUNDED_RECTANGLE, {
+                                    x: 0.4, y: 0.7, w: 4.4, h: 2.5,
+                                    fill: 'FFFFFF', // Z-index가 아래이므로 투명도 없이 불투명 흰색을 써도 이미지를 덮지 않음
+                                    line: { color: 'E5E5E5', width: 1 }
+                                });
+                                // 그 위에 이미지를 Z-order 2순위로 얹어 투명도 미지원 뷰어가 이미지를 가리는 버그를 해결합니다.
                                 photoSlide.addImage({
-                                    data: imgData1,
-                                    x: x1, y: y1, w: w1, h: h1
+                                    data: pptImgData1,
+                                    x: 0.4,
+                                    y: 0.7,
+                                    w: 4.4,
+                                    h: 2.5,
+                                    sizing: { type: 'contain', w: 4.4, h: 2.5 }
                                 });
                                 // 사진 1 정보 뱃지
+                                // PptxGenJS는 8자리 헥사코드(투명도 포함)를 직접 지원하지 않으므로 fill 오브젝트와 transparency 속성을 사용하여 안전하게 반투명 검은색 뱃지를 그립니다.
                                 photoSlide.addText(`📍 ${ph1.source} ${ph1.label ? `[${ph1.label}]` : ''}`, {
                                     x: 0.5, y: 2.9, w: 4.2, h: 0.20,
                                     fontSize: 8, bold: true, color: 'FFFFFF', fontFace: 'Malgun Gothic',
-                                    fill: '00000080', align: 'center'
+                                    fill: { color: '000000', transparency: 50 }, align: 'center'
                                 });
                             } catch (err) {
                                 console.warn("PPT 사진 1 로드 에러:", err);
@@ -8273,41 +8454,38 @@ ${context.scheduleTopic ? `- 미팅 안건: ${context.scheduleTopic}` : ''}
 
                             // 사진 2 (오른쪽 배치)
                             if (ph2) {
-                                // ※ PptxGenJS v3.12: "data:" 접두사를 제거하여 "image/type;base64,..." 형식으로 전달합니다.
-                                const imgData2 = ph2.dataUrl.replace(/^data:/, '');
-                                photoSlide.addShape(pptx.shapes.ROUNDED_RECTANGLE, {
-                                    x: 5.2, y: 0.7, w: 4.4, h: 2.5,
-                                    fill: 'F5F5F5', line: { color: 'E5E5E5', width: 1 }
-                                });
-
-                                // 이미지 실제 비율을 가져와 왜곡 방지 좌표 연산
-                                const dims2 = await getImageDimensions(ph2.dataUrl);
-                                const frameX2 = 5.2;
-                                const imgRatio2 = dims2.width / dims2.height;
-                                let w2, h2, x2, y2;
-
-                                if (imgRatio2 > frameRatio) {
-                                    w2 = frameW;
-                                    h2 = frameW / imgRatio2;
-                                    x2 = frameX2;
-                                    y2 = frameY + (frameH - h2) / 2;
+                                let pptImgData2 = '';
+                                const parts2 = ph2.dataUrl.split(';base64,');
+                                if (parts2.length === 2) {
+                                    const mime = parts2[0].replace(/^data:/, '');
+                                    const b64 = parts2[1];
+                                    pptImgData2 = `${mime};base64,${b64}`;
                                 } else {
-                                    h2 = frameH;
-                                    w2 = frameH * imgRatio2;
-                                    x2 = frameX2 + (frameW - w2) / 2;
-                                    y2 = frameY;
+                                    pptImgData2 = ph2.dataUrl.replace(/^data:/, '');
                                 }
+
                                 try {
-                                    console.log(`PPT 사진 2: data 형식 = ${imgData2.substring(0, 40)}..., 크기 = ${w2.toFixed(2)}x${h2.toFixed(2)}`);
+                                    console.log(`PPT 사진 2: data 형식 = ${pptImgData2.substring(0, 40)}...`);
+                                    // Z-Order 해결: 사진보다 Z-index가 낮도록 프레임 도형을 먼저 그립니다.
+                                    photoSlide.addShape(pptx.shapes.ROUNDED_RECTANGLE, {
+                                        x: 5.2, y: 0.7, w: 4.4, h: 2.5,
+                                        fill: 'FFFFFF',
+                                        line: { color: 'E5E5E5', width: 1 }
+                                    });
+                                    // 그 위에 이미지를 얹어 가림 문제를 예방합니다.
                                     photoSlide.addImage({
-                                        data: imgData2,
-                                        x: x2, y: y2, w: w2, h: h2
+                                        data: pptImgData2,
+                                        x: 5.2,
+                                        y: 0.7,
+                                        w: 4.4,
+                                        h: 2.5,
+                                        sizing: { type: 'contain', w: 4.4, h: 2.5 }
                                     });
                                     // 사진 2 정보 뱃지
                                     photoSlide.addText(`📍 ${ph2.source} ${ph2.label ? `[${ph2.label}]` : ''}`, {
                                         x: 5.3, y: 2.9, w: 4.2, h: 0.20,
                                         fontSize: 8, bold: true, color: 'FFFFFF', fontFace: 'Malgun Gothic',
-                                        fill: '00000080', align: 'center'
+                                        fill: { color: '000000', transparency: 50 }, align: 'center'
                                     });
                                 } catch (err) {
                                     console.warn("PPT 사진 2 로드 에러:", err);
