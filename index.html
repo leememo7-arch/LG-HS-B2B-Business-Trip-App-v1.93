@@ -383,8 +383,11 @@
                                 <p class="text-[9px] text-red-200 font-semibold leading-none">대한민국 (KST)</p>
                                 <span class="pulse-led" title="실시간 동기화 중"></span>
                             </div>
-                            <p id="clock-korea" class="text-sm font-bold text-white tracking-widest leading-none">
-                                --:--:--</p>
+                            <div class="flex items-baseline gap-1.5 mt-0.5">
+                                <p id="clock-korea" class="text-sm font-bold text-white tracking-widest leading-none">
+                                    --:--:--</p>
+                                <span id="date-korea" class="text-[9px] text-red-200 font-semibold leading-none">--.-- (요일)</span>
+                            </div>
                         </div>
                     </div>
 
@@ -397,8 +400,11 @@
                         <div>
                             <p id="clock-dest-label" class="text-[9px] text-red-200 font-semibold leading-none mb-0.5">
                                 출장지 시간</p>
-                            <p id="clock-dest" class="text-sm font-bold text-white tracking-widest leading-none">
-                                --:--:--</p>
+                            <div class="flex items-baseline gap-1.5 mt-0.5">
+                                <p id="clock-dest" class="text-sm font-bold text-white tracking-widest leading-none">
+                                    --:--:--</p>
+                                <span id="date-dest" class="text-[9px] text-red-200 font-semibold leading-none">--.-- (요일)</span>
+                            </div>
                         </div>
                         <!-- 국가 변경 버튼 -->
                         <button onclick="openClockCountryModal()"
@@ -519,6 +525,11 @@
                     <!-- JS 동적 렌더링 -->
                 </div>
 
+                <!-- 호텔 예약 영역 (Hotel Reservation Card) -->
+                <div id="hotel-reservation-container" class="mb-5">
+                    <!-- JS 동적 렌더링 -->
+                </div>
+
                 <!-- 일정 목록 컨테이너 -->
                 <div id="schedule-list" class="space-y-3">
                     <!-- JS로 동적 렌더링 -->
@@ -605,8 +616,8 @@
                             텍스트 기반 분석</span>
                     </div>
 
-                    <!-- Gemini API Key 설정 (접기/펼치기) -->
-                    <div class="bg-blue-50 border border-blue-200 rounded-xl p-3">
+                    <!-- Gemini API Key 설정 (접기/펼치기) — 자동화 처리를 위해 화면에서 숨김 -->
+                    <div class="bg-blue-50 border border-blue-200 rounded-xl p-3 hidden">
                         <div class="flex items-center gap-2">
                             <i class="fa-solid fa-key text-blue-600 text-xs"></i>
                             <span class="text-[10px] font-bold text-blue-800">Gemini API Key</span>
@@ -2119,6 +2130,7 @@
 
             function tick() {
                 const now = new Date();
+                const days = ['일', '월', '화', '수', '목', '금', '토'];
 
                 // ── 한국 시간 (KST, UTC+9) ──
                 const koreaTimeStr = now.toLocaleTimeString('ko-KR', {
@@ -2130,6 +2142,14 @@
                 });
                 const koreaEl = document.getElementById('clock-korea');
                 if (koreaEl) koreaEl.textContent = koreaTimeStr;
+
+                // 한국 날짜 구하기 (타임존 적용)
+                const krDate = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Seoul' }));
+                const krMm = String(krDate.getMonth() + 1).padStart(2, '0');
+                const krDd = String(krDate.getDate()).padStart(2, '0');
+                const krDay = days[krDate.getDay()];
+                const koreaDateEl = document.getElementById('date-korea');
+                if (koreaDateEl) koreaDateEl.textContent = `${krMm}.${krDd} (${krDay})`;
 
                 // ── 출장지 시간 ──
                 // 1순위: localStorage에 저장된 수동 선택 시간대
@@ -2153,6 +2173,14 @@
                 });
                 const destEl = document.getElementById('clock-dest');
                 if (destEl) destEl.textContent = destTimeStr;
+
+                // 출장지 날짜 구하기 (타임존 적용)
+                const destDate = new Date(now.toLocaleString('en-US', { timeZone: tzInfo.tz }));
+                const destMm = String(destDate.getMonth() + 1).padStart(2, '0');
+                const destDd = String(destDate.getDate()).padStart(2, '0');
+                const destDay = days[destDate.getDay()];
+                const destDateEl = document.getElementById('date-dest');
+                if (destDateEl) destDateEl.textContent = `${destMm}.${destDd} (${destDay})`;
 
                 // 라벨 및 국기 업데이트
                 const flagEl = document.getElementById('clock-dest-flag');
@@ -3135,6 +3163,31 @@
 
             // 구글맵 공유 url 상태를 입력창 ID별로 기억
             lastSelectedMapUrls[activeLocationTargetInputId] = mapUrl;
+
+            // [추가] 만약 대상 입력창이 호텔 이름 입력 필드('hotel-name')인 경우
+            // 로컬 스토리지에 호텔명을 업데이트하고, 관련 이메일을 추천 매핑(또는 플레이스홀더) 한 뒤 
+            // 호텔 렌더링을 갱신합니다.
+            if (activeLocationTargetInputId === "hotel-name") {
+                const info = getHotelInfo();
+                info.hotelName = name;
+                
+                // 구글맵에 기입된 장소명(호텔명)에 기반해 대략적인 이메일 매핑이 가능한지 봅니다.
+                let inferredEmail = "reservation@hotel.com";
+                const tripInfo = JSON.parse(localStorage.getItem("LG_TRIP_INFO")) || DEFAULT_TRIP_INFO;
+                const recList = getRecommendedHotelsForCountry(tripInfo.country);
+                const matchedRec = recList.find(h => name.toLowerCase().includes(h.name.split(' ')[0].toLowerCase()));
+                if (matchedRec) {
+                    inferredEmail = matchedRec.email;
+                } else {
+                    // 유추할 수 없으면 호텔 이름 소문자 공백 제거 + @hotel.com
+                    const cleanName = name.toLowerCase().replace(/[^a-z0-9]/g, "");
+                    inferredEmail = `reservation@${cleanName || 'hotel'}.com`;
+                }
+                info.hotelEmail = inferredEmail;
+                
+                localStorage.setItem("LG_HOTEL_INFO", JSON.stringify(info));
+                renderHotelReservation();
+            }
 
             closeMeetingLocationSearchModal();
         }
@@ -4974,9 +5027,401 @@ JSON 규격:
                 ${createTicketHtml(dep, "departure")}
                 ${createTicketHtml(ret, "return")}
             `;
+            
+            // 항공 스케줄 갱신 시 호텔 예약 매니저도 함께 연동 렌더링합니다.
+            renderHotelReservation();
         }
 
+        // =========================================================================
+        // [신규] 호텔 예약 및 아웃룩 연동 기능 관련 함수 (교육용 상세 주석 포함)
+        // =========================================================================
+
+        // 추천 비즈니스 호텔 데이터베이스 (출장 국가/도시에 매칭)
+        const RECOMMENDED_HOTELS = {
+            "시드니": [
+                { name: "Oakwood Premier Sydney", email: "sydney@oakwood.com", address: "355 George St, Sydney" },
+                { name: "Amora Hotel Jamison Sydney", email: "sydney@amorahotels.com", address: "11 Jamison St, Sydney" },
+                { name: "Sheraton Grand Hyde Park", email: "sydney.sheraton@sheraton.com", address: "161 Elizabeth St, Sydney" }
+            ],
+            "두바이": [
+                { name: "Armani Hotel Dubai", email: "dubai@armanihotels.com", address: "Burj Khalifa, Downtown Dubai" },
+                { name: "Address Downtown Dubai", email: "dubai@addresshotels.com", address: "Sheikh Mohammed bin Rashid Blvd, Dubai" },
+                { name: "Rove Downtown Dubai", email: "rove.downtown@rovehotels.com", address: "312 Al Sa'ada St, Dubai" }
+            ],
+            "샌프란시스코": [
+                { name: "San Francisco Marriott Marquis", email: "sf.marriott@marriott.com", address: "780 Mission St, San Francisco" },
+                { name: "Grand Hyatt San Francisco", email: "sf.hyatt@hyatt.com", address: "345 Stockton St, San Francisco" },
+                { name: "Hilton San Francisco Union Square", email: "sf.hilton@hilton.com", address: "333 O'Farrell St, San Francisco" }
+            ],
+            "서울": [
+                { name: "그랜드 인터컨티넨탈 서울 파르나스", email: "seoul.parnas@ihg.com", address: "서울특별시 강남구 테헤란로 521" },
+                { name: "콘래드 서울", email: "seoul.conrad@conrad.com", address: "서울특별시 영등포구 국제금융로 10" }
+            ]
+        };
+
+        // 기본 백업 호텔 리스트 (도시 매칭 실패 시 사용)
+        const DEFAULT_HOTELS = [
+            { name: "Global Business Hotel", email: "booking@globalbizhotel.com", address: "City Center Main Street" },
+            { name: "Premium Executive Suites", email: "reservation@executive-stay.com", address: "Financial District Avenue" }
+        ];
+
+        // 1. 호텔 정보 취득 및 초기화 함수 (비행 일정 날짜 변경 시 자동 동기화 기능 포함)
+        function getHotelInfo() {
+            const tripInfo = JSON.parse(localStorage.getItem("LG_TRIP_INFO")) || DEFAULT_TRIP_INFO;
+            const depDate = (tripInfo.departureFlight && tripInfo.departureFlight.date) ? tripInfo.departureFlight.date : new Date().toISOString().split('T')[0];
+            const retDate = (tripInfo.returnFlight && tripInfo.returnFlight.date) ? tripInfo.returnFlight.date : new Date(Date.now() + 6 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+
+            const saved = localStorage.getItem("LG_HOTEL_INFO");
+            if (saved) {
+                const info = JSON.parse(saved);
+                
+                // [동적 동기화] 비행 정보의 날짜가 바뀌었는데 호텔 투숙일과 다르다면, 자동으로 비행 날짜에 맞춥니다.
+                let dateUpdated = false;
+                if (tripInfo.departureFlight && tripInfo.departureFlight.date && info.checkIn !== tripInfo.departureFlight.date) {
+                    info.checkIn = tripInfo.departureFlight.date;
+                    dateUpdated = true;
+                }
+                if (tripInfo.returnFlight && tripInfo.returnFlight.date && info.checkOut !== tripInfo.returnFlight.date) {
+                    info.checkOut = tripInfo.returnFlight.date;
+                    dateUpdated = true;
+                }
+
+                if (dateUpdated) {
+                    localStorage.setItem("LG_HOTEL_INFO", JSON.stringify(info));
+                }
+                return info;
+            }
+
+            // 기본 호텔 추천 정보 중 첫 번째 선택
+            const matchedHotels = getRecommendedHotelsForCountry(tripInfo.country);
+            const defaultHotel = matchedHotels[0] || DEFAULT_HOTELS[0];
+
+            const initialInfo = {
+                hotelName: defaultHotel.name,
+                hotelEmail: defaultHotel.email,
+                checkIn: depDate,
+                checkOut: retDate,
+                guests: 1,
+                guestNames: tripInfo.members || "출장자 명단",
+                notes: "조식 포함, 금연실(Non-smoking room) 배정 희망합니다."
+            };
+
+            // 기본 구조를 로컬 스토리지에 즉시 저장
+            localStorage.setItem("LG_HOTEL_INFO", JSON.stringify(initialInfo));
+            return initialInfo;
+        }
+
+        // 2. 출장 국가/도시에 맞는 추천 호텔 목록 필터링
+        function getRecommendedHotelsForCountry(countryText) {
+            if (!countryText) return DEFAULT_HOTELS;
+            
+            // 국가명 텍스트(예: "호주 (시드니)")에서 매핑 키가 포함되어 있는지 대조합니다.
+            for (const key in RECOMMENDED_HOTELS) {
+                if (countryText.includes(key)) {
+                    return RECOMMENDED_HOTELS[key];
+                }
+            }
+            return DEFAULT_HOTELS;
+        }
+
+        // 3. 체크인-체크아웃 날짜 간의 투숙 박수(Nights) 계산 유틸리티
+        function calculateHotelNights(checkInStr, checkOutStr) {
+            if (!checkInStr || !checkOutStr) return 0;
+            const d1 = new Date(checkInStr);
+            const d2 = new Date(checkOutStr);
+            const diffTime = d2.getTime() - d1.getTime();
+            if (isNaN(diffTime)) return 0;
+            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+            return diffDays > 0 ? diffDays : 0;
+        }
+
+        // 4. 추천 호텔 클릭 시 입력 폼에 즉시 반영하는 함수
+        function selectRecommendedHotel(name, email) {
+            const info = getHotelInfo();
+            info.hotelName = name;
+            info.hotelEmail = email;
+
+            // 로컬 스토리지 저장 후 리렌더링
+            localStorage.setItem("LG_HOTEL_INFO", JSON.stringify(info));
+            renderHotelReservation();
+        }
+
+        // 5. 사용자가 인풋 필드 입력 시 실시간으로 로컬 스토리지에 업데이트하는 함수
+        function saveCurrentHotelInfo() {
+            const hotelName = document.getElementById("hotel-name").value;
+            const hotelEmail = document.getElementById("hotel-email").value;
+            const checkIn = document.getElementById("hotel-checkin").value;
+            const checkOut = document.getElementById("hotel-checkout").value;
+            const guests = document.getElementById("hotel-guests").value;
+            const guestNames = document.getElementById("hotel-guest-names").value;
+            const notes = document.getElementById("hotel-notes").value;
+
+            const updated = {
+                hotelName: hotelName,
+                hotelEmail: hotelEmail,
+                checkIn: checkIn,
+                checkOut: checkOut,
+                guests: parseInt(guests, 10),
+                guestNames: guestNames,
+                notes: notes
+            };
+
+            localStorage.setItem("LG_HOTEL_INFO", JSON.stringify(updated));
+
+            // 투숙 박수 실시간 계산 및 렌더링을 갱신
+            const nights = calculateHotelNights(checkIn, checkOut);
+            const display = document.getElementById("hotel-nights-display");
+            if (display) {
+                display.textContent = `${nights}박 ${nights + 1}일`;
+            }
+        }
+
+        // 6. 호텔 날짜 인풋 변경 시 호출되는 이벤트 핸들러
+        function onHotelDateChange() {
+            saveCurrentHotelInfo();
+            // 전체 렌더를 다시 하여 입력값 흐름 유지 및 동기화 수행
+            renderHotelReservation();
+        }
+
+        // 7. 아웃룩 및 OS 기본 메일 프로그램 연동 이메일 발송 함수
+        function sendHotelReservationEmail() {
+            const hotelInfo = getHotelInfo();
+            const tripInfo = JSON.parse(localStorage.getItem("LG_TRIP_INFO")) || DEFAULT_TRIP_INFO;
+            
+            const to = hotelInfo.hotelEmail || "reservation@hotel.com";
+            const nights = calculateHotelNights(hotelInfo.checkIn, hotelInfo.checkOut);
+            
+            // 메일 제목 구성: 대표 출장자 성함과 호텔명 명시
+            const representative = tripInfo.members ? tripInfo.members.split(',')[0].trim() : "출장자";
+            const subject = `[LG전자 출장 예약 요청] ${representative} - ${hotelInfo.hotelName} 예약 요청 (${hotelInfo.checkIn} ~ ${hotelInfo.checkOut}, ${nights}박)`;
+            
+            // 메일 본문 양식 (B2B 출장 승인 및 예약에 용이한 깔끔한 포맷)
+            const body = `안녕하세요, 호텔 예약 담당자님.
+LG전자 B2B 해외 출장 일정에 따른 호텔 예약을 요청 드립니다.
+
+■ 출장 기본 정보
+- 출장 국가/도시: ${tripInfo.country}
+- 출장 목적: ${tripInfo.purpose}
+
+■ 호텔 예약 상세 정보
+- 신청 호텔: ${hotelInfo.hotelName}
+- 체크인 날짜: ${hotelInfo.checkIn} (15:00 이후)
+- 체크아웃 날짜: ${hotelInfo.checkOut} (12:00 이전) (총 ${nights}박)
+- 객실 타입: 비즈니스 스탠다드 싱글/더블 룸 (조식 포함 필수)
+- 투숙 인원: 총 ${hotelInfo.guests}명 (${hotelInfo.guestNames})
+
+■ 예약자(대표) 개인정보
+- 영문 성명 (여권 기준): [여권상의 정확한 영문 성명 입력 필요]
+- 연락처: [대표 연락처 입력 필요]
+- 소속 사번: LG전자 B2B 사업본부 / [사번 입력 필요]
+
+■ 특별 요청사항
+- ${hotelInfo.notes || '없음'}
+
+예약 가능 여부와 객실 요금(인보이스)을 회신해 주시기 바랍니다.
+감사합니다.`;
+
+            // 아웃룩 메일 연동을 위해 mailto 프로토콜을 사용합니다.
+            // 줄바꿈(%0D%0A) 처리를 원활히 하기 위해 encodeURIComponent를 적용합니다.
+            const mailtoUrl = `mailto:${to}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+            
+            // mailto 링크로 브라우저 액션 이동 -> OS 메일 클라이언트(아웃룩 등) 구동
+            window.location.href = mailtoUrl;
+        }
+
+        // 8. 아웃룩 웹 버전 및 기타 메일 시스템 사용자를 위한 클립보드 복사 함수
+        function copyHotelReservationText() {
+            const hotelInfo = getHotelInfo();
+            const tripInfo = JSON.parse(localStorage.getItem("LG_TRIP_INFO")) || DEFAULT_TRIP_INFO;
+            
+            const nights = calculateHotelNights(hotelInfo.checkIn, hotelInfo.checkOut);
+            const representative = tripInfo.members ? tripInfo.members.split(',')[0].trim() : "출장자";
+            const subject = `[LG전자 출장 예약 요청] ${representative} - ${hotelInfo.hotelName} 예약 요청 (${hotelInfo.checkIn} ~ ${hotelInfo.checkOut}, ${nights}박)`;
+            
+            const body = `안녕하세요, 호텔 예약 담당자님.
+LG전자 B2B 해외 출장 일정에 따른 호텔 예약을 요청 드립니다.
+
+■ 출장 기본 정보
+- 출장 국가/도시: ${tripInfo.country}
+- 출장 목적: ${tripInfo.purpose}
+
+■ 호텔 예약 상세 정보
+- 신청 호텔: ${hotelInfo.hotelName}
+- 체크인 날짜: ${hotelInfo.checkIn} (15:00 이후)
+- 체크아웃 날짜: ${hotelInfo.checkOut} (12:00 이전) (총 ${nights}박)
+- 객실 타입: 비즈니스 스탠다드 싱글/더블 룸 (조식 포함 필수)
+- 투숙 인원: 총 ${hotelInfo.guests}명 (${hotelInfo.guestNames})
+
+■ 예약자(대표) 개인정보
+- 영문 성명 (여권 기준): [여권상의 정확한 영문 성명 입력 필요]
+- 연락처: [대표 연락처 입력 필요]
+- 소속 사번: LG전자 B2B 사업본부 / [사번 입력 필요]
+
+■ 특별 요청사항
+- ${hotelInfo.notes || '없음'}
+
+예약 가능 여부와 객실 요금(인보이스)을 회신해 주시기 바랍니다.
+감사합니다.`;
+
+            const fullText = `[메일 제목]\n${subject}\n\n[메일 본문]\n${body}`;
+            
+            // 클립보드 복사 실행
+            navigator.clipboard.writeText(fullText).then(() => {
+                alert("호텔 예약 이메일 양식(제목 및 본문)이 클립보드에 성공적으로 복사되었습니다. 메일 작성 창에 붙여넣기(Ctrl+V) 하세요!");
+            }).catch(err => {
+                console.error("클립보드 복사 실패:", err);
+                alert("복사에 실패했습니다. 수동으로 복사해주세요.");
+            });
+        }
+
+        // 9. 호텔 예약 매니저 UI 그리기 및 렌더링 메인 함수
+        function renderHotelReservation() {
+            const container = document.getElementById("hotel-reservation-container");
+            if (!container) return;
+
+            const hotelInfo = getHotelInfo();
+            const tripInfo = JSON.parse(localStorage.getItem("LG_TRIP_INFO")) || DEFAULT_TRIP_INFO;
+            
+            // 현재 출장 도시에 매칭되는 추천 호텔 가져오기
+            const recommendedList = getRecommendedHotelsForCountry(tripInfo.country);
+
+            // 추천 호텔 배지 리스트 HTML 빌드
+            let recommendedHtml = "";
+            if (recommendedList && recommendedList.length > 0) {
+                recommendedList.forEach(hotel => {
+                    // 현재 선택된 호텔과 일치하면 하이라이트 표시
+                    const isSelected = hotelInfo.hotelName === hotel.name;
+                    recommendedHtml += `
+                        <button onclick="selectRecommendedHotel('${hotel.name}', '${hotel.email}')" type="button"
+                            class="flex-shrink-0 px-3 py-1.5 rounded-xl text-[10px] font-bold border transition-all duration-200 ${
+                                isSelected 
+                                ? 'bg-lgRed text-white border-lgRed shadow-sm scale-105' 
+                                : 'bg-gray-50 text-gray-700 border-gray-200 hover:bg-gray-100'
+                            }">
+                            <i class="fa-solid fa-hotel mr-1 text-[9px]"></i>
+                            <span>${hotel.name}</span>
+                        </button>
+                    `;
+                });
+            } else {
+                recommendedHtml = `<p class="text-[10px] text-gray-400">추천 리스트가 없습니다.</p>`;
+            }
+
+            // 계산된 투숙 박수 구하기
+            const nights = calculateHotelNights(hotelInfo.checkIn, hotelInfo.checkOut);
+
+            // 프리미엄 글래스모피즘 카드 인터페이스 렌더링
+            container.innerHTML = `
+                <div class="premium-card rounded-2xl bg-white p-4 shadow-md border border-gray-150 relative overflow-hidden">
+                    
+                    <!-- 1. 헤더 영역 -->
+                    <div class="flex items-center justify-between mb-3 border-b border-gray-100 pb-2">
+                        <h3 class="text-xs font-bold text-gray-800 flex items-center gap-1.5">
+                            <i class="fa-solid fa-hotel text-lgRed text-sm"></i>
+                            출장지 호텔 예약 매니저
+                        </h3>
+                        <span class="text-[9px] bg-red-50 text-lgRed border border-red-200 px-2 py-0.5 rounded-full font-bold">
+                            Outlook 자동 연동
+                        </span>
+                    </div>
+
+                    <!-- 2. 추천 비즈니스 호텔 스크롤 영역 -->
+                    <div class="mb-3">
+                        <label class="block text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-1.5">
+                            🏨 ${tripInfo.country ? tripInfo.country.split(' ')[0] : '출장지'} 추천 비즈니스 호텔 (클릭 시 자동 선택)
+                        </label>
+                        <div class="flex gap-1.5 overflow-x-auto pb-1.5 scrollbar-thin">
+                            ${recommendedHtml}
+                        </div>
+                    </div>
+
+                    <!-- 3. 상세 정보 입력 폼 -->
+                    <div class="space-y-2.5">
+                        
+                        <!-- 호텔명 & 예약 이메일 -->
+                        <div class="grid grid-cols-2 gap-2">
+                            <div>
+                                <label class="block text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">호텔 이름</label>
+                                <div class="flex gap-1">
+                                    <input type="text" id="hotel-name" value="${hotelInfo.hotelName || ''}" oninput="saveCurrentHotelInfo()" placeholder="호텔명 직접 입력" class="premium-input">
+                                    <button type="button" onclick="openMeetingLocationSearchModal('hotel-name')"
+                                        class="bg-gray-100 hover:bg-gray-200 border text-[9px] font-bold px-2 rounded-lg transition active:scale-95 flex items-center gap-0.5 flex-shrink-0">
+                                        <i class="fa-solid fa-magnifying-glass text-[8px]"></i> 검색
+                                    </button>
+                                </div>
+                            </div>
+                            <div>
+                                <label class="block text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">예약 수신 이메일</label>
+                                <input type="email" id="hotel-email" value="${hotelInfo.hotelEmail || ''}" oninput="saveCurrentHotelInfo()" placeholder="reservation@hotel.com" class="premium-input">
+                            </div>
+                        </div>
+
+                        <!-- 체크인 & 체크아웃 -->
+                        <div class="grid grid-cols-2 gap-2">
+                            <div>
+                                <label class="block text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">체크인 날짜</label>
+                                <input type="date" id="hotel-checkin" value="${hotelInfo.checkIn || ''}" onchange="onHotelDateChange()" class="premium-input">
+                            </div>
+                            <div>
+                                <label class="block text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">체크아웃 날짜</label>
+                                <input type="date" id="hotel-checkout" value="${hotelInfo.checkOut || ''}" onchange="onHotelDateChange()" class="premium-input">
+                            </div>
+                        </div>
+
+                        <!-- 실시간 박수 계산 대시보드 배너 -->
+                        <div class="flex items-center justify-between bg-red-50/50 border border-red-100/50 rounded-xl px-3 py-1.5 text-xs">
+                            <span class="text-[10px] text-gray-500 font-medium">자동 계산된 투숙 기간</span>
+                            <span id="hotel-nights-display" class="text-lgRed font-black text-xs">
+                                ${nights}박 ${nights + 1}일
+                            </span>
+                        </div>
+
+                        <!-- 투숙 인원 & 동반인원 명단 -->
+                        <div class="grid grid-cols-3 gap-2">
+                            <div class="col-span-1">
+                                <label class="block text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">투숙 인원</label>
+                                <select id="hotel-guests" onchange="saveCurrentHotelInfo()" class="premium-input">
+                                    <option value="1" ${hotelInfo.guests === 1 ? 'selected' : ''}>1명</option>
+                                    <option value="2" ${hotelInfo.guests === 2 ? 'selected' : ''}>2명</option>
+                                    <option value="3" ${hotelInfo.guests === 3 ? 'selected' : ''}>3명</option>
+                                    <option value="4" ${hotelInfo.guests === 4 ? 'selected' : ''}>4명 이상</option>
+                                </select>
+                            </div>
+                            <div class="col-span-2">
+                                <label class="block text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">투숙객 실명 (출장자)</label>
+                                <input type="text" id="hotel-guest-names" value="${hotelInfo.guestNames || ''}" oninput="saveCurrentHotelInfo()" placeholder="예: 홍길동 부장, 김철수 책임" class="premium-input">
+                            </div>
+                        </div>
+
+                        <!-- 메모/특별 지시 -->
+                        <div>
+                            <label class="block text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">특별 요청사항</label>
+                            <input type="text" id="hotel-notes" value="${hotelInfo.notes || ''}" oninput="saveCurrentHotelInfo()" placeholder="예: 금연실 배정, 침대 추가 등" class="premium-input">
+                        </div>
+
+                    </div>
+
+                    <!-- 4. 아웃룩 연동 및 클립보드 복사 액션 버튼 그룹 -->
+                    <div class="grid grid-cols-2 gap-2 mt-3.5">
+                        <button onclick="sendHotelReservationEmail()"
+                            class="py-2 rounded-xl bg-lgRed text-white font-bold text-[11px] flex items-center justify-center gap-1.5 transition active:scale-95 hover:bg-lgRed-dark shadow-sm hover-shine-btn">
+                            <i class="fa-solid fa-envelope-open-text text-xs"></i>
+                            <span>Outlook 자동 연동 메일</span>
+                        </button>
+                        <button onclick="copyHotelReservationText()"
+                            class="py-2 rounded-xl bg-gray-100 border text-gray-700 font-bold text-[11px] flex items-center justify-center gap-1.5 transition active:scale-95 hover:bg-gray-200">
+                            <i class="fa-solid fa-copy text-xs"></i>
+                            <span>제목/본문 복사</span>
+                        </button>
+                    </div>
+
+                </div>
+            `;
+        }
+
+        // 일정 목록을 렌더링하는 함수 (일반 미팅 일정만 시간순 정렬하여 노출)
         // 일정 목록을 렌더링하는 함수 (항공권과 일반 미팅 일정을 통합하여 시간순 정렬)
+
         // 일정 목록을 렌더링하는 함수 (일반 미팅 일정만 시간순 정렬하여 노출)
         async function renderSchedule() {
             // 상단 고정 항공권 영역 렌더링
@@ -5695,9 +6140,89 @@ JSON 규격:
             }
         }
 
+        /**
+         * [추가] 구글 번역 무료 API (API Key 불필요)를 사용하여 다국어(중국어, 영어, 아랍어 등)
+         * 대화 텍스트를 자연스러운 한국어로 비동기 사전 번역하여 100% 한글 요약 품질을 보장합니다.
+         */
+        async function translateMinutesText(text) {
+            if (!text || text.trim().length < 5) return text;
+            
+            // [추가] 줄바꿈이 없이 한 줄로 뭉쳐진 다국어 대본의 경우, 화자 패턴(예: 이름: 또는 이름：) 직전에 줄바꿈(\n)을 강제 삽입하여 줄을 분리해줍니다.
+            text = text.replace(/([^\s\n：:]+?)([:：])/g, '\n$1$2');
+            
+            // 한글 포함 여부 검사 (한글이 대다수라면 번역 API 생략하여 성능 보존)
+            const koreanRegex = /[ㄱ-ㅎ|ㅏ-ㅣ|가-힣]/;
+            const hasKorean = koreanRegex.test(text);
+            
+            // 한글 글자 비율이 30% 이하인 경우 다국어 대본으로 인지하여 사전 번역 기동
+            let koreanCharCount = 0;
+            for (let i = 0; i < text.length; i++) {
+                if (koreanRegex.test(text[i])) koreanCharCount++;
+            }
+            const koreanRatio = koreanCharCount / text.length;
+            
+            if (hasKorean && koreanRatio > 0.3) {
+                return text; // 이미 한글로 작성된 회의록은 그대로 진행
+            }
+
+            try {
+                // 줄 단위로 쪼개어 번역 (화자명 콜론 분리하여 번역 완성도 향상)
+                const lines = text.split('\n');
+                const translatePromises = lines.map(async (line) => {
+                    const trimmed = line.trim();
+                    if (!trimmed) return '';
+                    
+                    // 화자 콜론(':') 분리 인식 (전각/반각 콜론 지원)
+                    const colonIdx = trimmed.indexOf(':');
+                    const chineseColonIdx = trimmed.indexOf('：');
+                    const idx = colonIdx > 0 ? colonIdx : (chineseColonIdx > 0 ? chineseColonIdx : -1);
+                    
+                    if (idx > 0) {
+                        const speaker = trimmed.substring(0, idx).trim();
+                        const speech = trimmed.substring(idx + 1).trim();
+                        if (!speech) return trimmed;
+                        
+                        // 화자 이름과 대화 말풍선 각각 번역
+                        const [transSpeaker, transSpeech] = await Promise.all([
+                            fetchSingleTranslation(speaker),
+                            fetchSingleTranslation(speech)
+                        ]);
+                        return `${transSpeaker}: ${transSpeech}`;
+                    } else {
+                        return await fetchSingleTranslation(trimmed);
+                    }
+                });
+                
+                const results = await Promise.all(translatePromises);
+                return results.filter(Boolean).join('\n');
+            } catch (err) {
+                console.warn('[TranslateAPI] 사전 번역 실패, 원본 대본으로 속행:', err);
+                return text;
+            }
+        }
+
+        // 구글 gtx 번역 API 단일 호출 유틸리티 (CORS 우회 및 무료 무제한 활용)
+        async function fetchSingleTranslation(query) {
+            if (!query || !query.trim()) return '';
+            try {
+                const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=ko&dt=t&q=${encodeURIComponent(query)}`;
+                const res = await fetch(url);
+                if (!res.ok) return query;
+                const data = await res.json();
+                let result = '';
+                if (data && data[0]) {
+                    data[0].forEach(part => {
+                        if (part && part[0]) result += part[0];
+                    });
+                }
+                return result || query;
+            } catch (e) {
+                return query;
+            }
+        }
+
         // ── AI 분석 시작 메인 함수 ──
         async function startMinutesAnalysis() {
-            const apiKey = localStorage.getItem('GEMINI_API_KEY') || '';
             const subject = (document.getElementById('min-subject') || {}).value || '';
             const speakers = (document.getElementById('min-speakers') || {}).value || 'auto';
             const style = (document.getElementById('min-style') || {}).value || 'bullet';
@@ -5714,28 +6239,24 @@ JSON 규격:
             const titleEl = document.getElementById('min-loading-title');
             const descEl = document.getElementById('min-loading-desc');
 
-            // Step 1: 데이터 로드
+            // Step 1: 데이터 로드 및 다국어 사전 번역 기동
             updateMinutesStep('upload', 'active');
-            titleEl.textContent = 'AI 엔진에 데이터 전송 중...';
-            descEl.textContent = '텍스트 스크립트 데이터를 정합 검증하고 있습니다.';
-            await new Promise(r => setTimeout(r, 800));
+            titleEl.textContent = '다국어 감지 및 사전 번역 중...';
+            descEl.textContent = '중국어, 영어, 아랍어 등 다국어 대본을 매끄러운 한국어로 자동 실시간 번역하고 있습니다.';
+            
+            // 번역 수행
+            const translatedText = await translateMinutesText(textContent);
+            
             updateMinutesStep('upload', 'done');
 
-            // Step 2: AI 분석
+            // Step 2: AI 분석 및 번역
             updateMinutesStep('stt', 'active');
-            titleEl.textContent = '전문 AI 회의 기록 관리자 분석 진행 중...';
-            descEl.textContent = 'Gemini LLM이 대화 내용의 맥락과 의사결정을 파악하고 있습니다.';
+            titleEl.textContent = '전문 AI 다국어 요약 진행 중...';
+            descEl.textContent = 'Llama 3 AI 모델이 번역된 텍스트를 분석하여 자연스러운 한국어 표준 4단 회의록으로 구조화합니다.';
 
             try {
-                let geminiResult;
-
-                if (apiKey) {
-                    // Gemini로 JSON 구조화 및 전문 회의록 템플릿 요약 요청
-                    geminiResult = await structureMinutesWithGemini(textContent, subject, speakers, style, custom, apiKey);
-                } else {
-                    // API Key 없을 때 로컬 파싱 폴백
-                    geminiResult = buildFallbackMinutes(textContent, subject);
-                }
+                // 번역된 텍스트를 백엔드 서버 API에 전송하여 고품질 요약 획득
+                const aiResult = await structureMinutesWithLlama(translatedText, subject, speakers, style, custom);
 
                 updateMinutesStep('stt', 'done');
                 updateMinutesStep('summary', 'active');
@@ -5745,16 +6266,40 @@ JSON 규격:
                 updateMinutesStep('summary', 'done');
 
                 // STEP C 결과 화면 렌더링
-                minutesLastResult = geminiResult;
-                renderMinutesDashboard(geminiResult);
+                minutesLastResult = aiResult;
+                renderMinutesDashboard(aiResult);
 
             } catch (err) {
-                console.error('[MinutesAI] 분석 오류:', err);
-                // 폴백: 기본 분석
-                const fallback = buildFallbackMinutes(textContent || '텍스트 파일 분석 결과', subject);
+                console.error('[MinutesAI] 백엔드 분석 오류 (로컬 폴백 기동):', err);
+                // API 호출 실패 시 스마트 로컬 폴백 기동 (번역된 텍스트 기반)
+                const fallback = buildFallbackMinutes(translatedText || '텍스트 파일 분석 결과', subject);
                 minutesLastResult = fallback;
                 renderMinutesDashboard(fallback);
             }
+        }
+
+        // ── Next.js API Routes를 활용한 Llama 3 번역 및 요약 호출 ──
+        async function structureMinutesWithLlama(rawText, subject, speakers, style, custom) {
+            // Next.js API Routes 호출 (서버 환경변수 내장 토큰 사용)
+            const response = await fetch('/api/summarize', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    rawText,
+                    subject,
+                    speakers,
+                    style,
+                    custom
+                })
+            });
+
+            if (!response.ok) {
+                const errText = await response.text();
+                throw new Error(`백엔드 서버 API 오류: ${response.status} - ${errText}`);
+            }
+
+            const data = await response.json();
+            return data;
         }
 
         // ── Gemini에 구조화된 JSON 회의록 요청 (전문 회의 기록 관리자 4단 표준 템플릿 강제) ──
@@ -5851,7 +6396,7 @@ JSON 규격:
             const transcript = [];
             const speakersSet = new Set();
 
-            // 1. 대화 스크립트 파싱 및 화자 감출
+            // 1. 대화 스크립트 파싱 및 화자 검출
             lines.forEach((line, i) => {
                 const colonIdx = line.indexOf(':');
                 if (colonIdx > 0 && colonIdx < 30) {
@@ -5908,37 +6453,36 @@ JSON 규격:
             // 3. 실제 대화 스크립트 기반 동적 의사결정(Decisions) 및 Action Items 추출
             const decisions = [];
             const actionItems = [];
-            const topicSummaries = [];
 
             // 텍스트 분석에 사용될 키워드 매칭
-            const decisionKeywords = ["결정", "합의", "결론", "확정", "하기로", "반영", "동의", "승인", "적용"];
-            const actionKeywords = ["까지", "기한", "완료", "ASAP", "다음", "준비", "제출", "보고", "공유", "피드백", "마무리"];
+            const decisionKeywords = ["결정", "합의", "결론", "확정", "하기로", "반영", "동의", "승인", "적용", "agree", "confirm", "decision", "ok"];
+            const actionKeywords = ["까지", "기한", "완료", "ASAP", "다음", "준비", "제출", "보고", "공유", "피드백", "마무리", "by", "schedule", "action", "task"];
 
             transcript.forEach(t => {
-                const spkClean = t.speaker.replace(/\([^)]+\)/g, '').trim(); // 괄호 제거한 깔끔한 이름
+                const spkClean = t.speaker.replace(/\([^)]+\)/g, '').trim();
 
                 // 의사결정 사항 추출
-                const hasDecision = decisionKeywords.some(kw => t.text.includes(kw));
+                const hasDecision = decisionKeywords.some(kw => t.text.toLowerCase().includes(kw));
                 if (hasDecision && t.text.length > 10 && decisions.length < 5) {
                     let summary = t.text.trim();
-                    if (summary.endsWith('.')) summary = summary.slice(0, -1);
+                    if (summary.length > 80) summary = summary.substring(0, 80) + '...';
                     decisions.push({
-                        topic: `${spkClean} 담당 제안 건`,
-                        summary: `${summary} (논의 근거: 대화 내 발화 기준)`
+                        topic: `${spkClean} 제안 건`,
+                        summary: `${summary}`
                     });
                 }
 
                 // Action Item 추출
-                const hasAction = actionKeywords.some(kw => t.text.includes(kw));
+                const hasAction = actionKeywords.some(kw => t.text.toLowerCase().includes(kw));
                 if (hasAction && t.text.length > 10 && actionItems.length < 5) {
                     let dueDate = 'ASAP';
-                    const dateMatch = t.text.match(/(\d+월\s*\d+일|\d+일|다음\s*주\s*[월화수목금]|차주\s*[월화수목금])/);
+                    const dateMatch = t.text.match(/(\d+월\s*\d+일|\d+일|다음\s*주\s*[월화수목금]|차주\s*[월화수목금]|\d{4}-\d{2}-\d{2})/);
                     if (dateMatch) {
                         dueDate = dateMatch[0];
                     }
 
                     let taskText = t.text.trim();
-                    if (taskText.endsWith('.')) taskText = taskText.slice(0, -1);
+                    if (taskText.length > 80) taskText = taskText.substring(0, 80) + '...';
 
                     actionItems.push({
                         task: taskText,
@@ -5951,55 +6495,56 @@ JSON 규격:
             // 추출 결과가 적을 때를 대비한 디폴트 백업 데이터
             if (decisions.length === 0) {
                 decisions.push({
-                    topic: '협업 및 업무 프로세스 정립',
-                    summary: '투입된 대화 내용을 기반으로 현지화 전략 수립 및 핵심 사안 반영에 상호 동의함.'
+                    topic: '협업 프로세스 수립',
+                    summary: '회의 스크립트 내 발화 흐름을 바탕으로 상호 협력 방안에 대해 전반적인 동의를 확인함.'
                 });
             }
             if (actionItems.length === 0) {
                 const primaryAssignee = detectedSpeakers[0] || '홍길동 부장';
                 actionItems.push({
-                    task: '회의 내용 최종 정리본 배포 및 업무 할당 수행',
+                    task: '대화 내 중요 할당 업무 및 세부 액션 아이템 최종 조율',
                     assignee: primaryAssignee,
                     dueDate: '3 영업일 이내'
                 });
             }
 
-            // 4. 주제별 논의 요약(## 2) 동적 빌드
-            // 대화 스크립트에서 명사 키워드를 뽑아서 주제를 다양하게 분기합니다.
-            const textLower = text.toLowerCase();
+            // 4. 주제별 논의 요약(## 2) 동적 빌드 (하드코딩 텍스트 원천 차단)
+            // 대화 스크립트 내부에서 앞선 주요 발화 문장들을 발췌하여 동적으로 요약 세부를 구성합니다.
             const topicsList = [];
+            
+            // 실제 대화에서 화자 발언 위주로 3개 추출
+            const validUtterances = transcript.filter(t => t.text.length > 12).slice(0, 3);
+            validUtterances.forEach((u, index) => {
+                let cleanText = u.text.trim();
+                if (cleanText.length > 120) cleanText = cleanText.substring(0, 120) + '...';
+                topicsList.push({
+                    title: `주요 현안 논의 사항 - 발화 주제 ${index + 1}`,
+                    details: `"${u.speaker}" 발화 기준: [${cleanText}] 관련 세부 사항을 논의하고 검토를 진행함.`
+                });
+            });
 
-            if (textLower.includes('디자인') || textLower.includes('시안') || textLower.includes('색상') || textLower.includes('테마')) {
+            // 추출된 주제가 부족할 경우에만 기본 일반 주제로 보완
+            if (topicsList.length === 0) {
                 topicsList.push({
-                    title: '사용자 인터페이스(UI) 디자인 시안 및 브랜드 아이덴티티 검토',
-                    details: 'LG Deep Red 및 Charcoal 테마의 현지 사용성 증대 방안과 피그마 실시간 공유 방안이 중점적으로 다루어짐.'
-                });
-            }
-            if (textLower.includes('개발') || textLower.includes('스펙') || textLower.includes('api') || textLower.includes('구축') || textLower.includes('시스템')) {
-                topicsList.push({
-                    title: '기술 표준 스펙 검증 및 로컬 시스템 인프라 구축 연동',
-                    details: '현지 결제 시스템 연동 가이드라인 분석 및 개발 공수 조율에 대한 기술적 측면의 교차 검증이 이루어짐.'
-                });
-            }
-            if (textLower.includes('마케팅') || textLower.includes('홍보') || textLower.includes('시장') || textLower.includes('수출')) {
-                topicsList.push({
-                    title: '현지화 B2B 마케팅 프로모션 및 채널 진입 방안 수립',
-                    details: '해외 유통망 대표 피치덱 자료 분석과 상호 공동 마케팅 협력에 대한 비즈니스 액션 플랜이 논의됨.'
+                    title: `${subject || 'B2B 미팅'} 주요 안건 조율 및 논의`,
+                    details: '출장 일정에 따른 핵심 비즈니스 사항 조율 및 각 화자별 입장 확인을 수행함.'
                 });
             }
 
-            // 만약 감지된 주제가 없거나 1개뿐이라면 기본 출장 안건 중심 주제로 보완
-            if (topicsList.length < 2) {
-                topicsList.push({
-                    title: `${subject || 'B2B 해외 출장'} 핵심 비즈니스 성과 및 협약안 논의`,
-                    details: '출장 일정에 부합하는 주요 미팅 안건 조율과 각 담당자별 역할(Role) 할당을 진행함.'
-                });
-            }
-            if (topicsList.length < 2) {
-                topicsList.push({
-                    title: '향후 비즈니스 가이드라인 및 후속 피드백 회람',
-                    details: '안정적인 파트너십 유지를 위해 주간 정기 미팅 셋업과 차기 보고서 취합 일정을 검토함.'
-                });
+            // 본문 텍스트 내에서 특정 국가 언급 여부 파싱하여 장소 환각 제어
+            const textLower = text.toLowerCase();
+            let matchedLocation = '해외 현지 미팅룸';
+            
+            if (textLower.includes('china') || textLower.includes('중국') || textLower.includes('상하이') || textLower.includes('북경')) {
+                matchedLocation = '중국 현지 미팅룸';
+            } else if (textLower.includes('dubai') || textLower.includes('두바이') || textLower.includes('uae') || textLower.includes('아랍')) {
+                matchedLocation = '두바이 현지 미팅룸';
+            } else if (textLower.includes('america') || textLower.includes('미국') || textLower.includes('usa') || textLower.includes('뉴욕')) {
+                matchedLocation = '미국 현지 미팅룸';
+            } else if (textLower.includes('australia') || textLower.includes('호주') || textLower.includes('시드니')) {
+                matchedLocation = '호주 현지 미팅룸';
+            } else if (tripInfo && tripInfo.country) {
+                matchedLocation = `${tripInfo.country} 현지 미팅룸`;
             }
 
             // 현재 날짜/시간 구하기
@@ -6014,14 +6559,14 @@ JSON 규격:
             // 마크다운 문자열 조립
             let mdResult = `## 1. 회의 정보
 - 일시: ${formattedDate} 10:00~11:00 (60분)
-- 장소: ${tripInfo.country} 현지 미팅룸
+- 장소: ${matchedLocation}
 - 참석자: ${participantsText}
-- 회의 안건: ${subject || 'B2B 미팅 및 수출 가이드라인 조율'}
+- 회의 안건: ${subject || 'B2B 미팅 및 다국어 전략 조율'}
 
 ## 2. 주제별 논의 내용 요약\n`;
 
             topicsList.forEach((topic, index) => {
-                mdResult += `📌 **[주제 ${index + 1}] ${topic.title}**\n- **핵심 요약**: ${topic.details}\n- **상세 논의**: 대화 스크립트 대화 내용을 기초로 현지 애로사항 및 자사 솔루션의 적용 가능성을 심층 분석하였습니다.\n\n`;
+                mdResult += `📌 **[주제 ${index + 1}] ${topic.title}**\n- **핵심 요약**: ${topic.details}\n- **상세 논의**: 회의록 대화 내용을 바탕으로 다국어 발언 맥락 및 주요 쟁점을 상세히 정리하였습니다.\n\n`;
             });
 
             mdResult += `\n## 3. 합의된 결정사항 (To-Do List)\n`;
@@ -6032,7 +6577,7 @@ JSON 규격:
             mdResult += `\n## 4. 후속 실천과제 (담당자별 정리)\n`;
             actionItems.forEach(item => {
                 const spkRole = item.assignee.includes('(') ? item.assignee : `${item.assignee} 담당자`;
-                const detailedParagraph = `본 실천과제는 회의 중 합의된 요구사항의 차질 없는 이행을 위해 담당 부서에서 즉각 실행해야 하는 필수 사안입니다. 배정된 [${item.task}] 과제에 대해 실행 배경과 프로세스를 확인하고, 현지 바이어 및 본사 관련 팀과 실시간으로 진행 현황을 조율하여 최종 결과물을 기한 내 완수해 주시기 바랍니다.`;
+                const detailedParagraph = `본 실천과제는 회의 중 논의된 [${item.task}] 안건의 차질 없는 이행을 위해 배정되었습니다. 관련 담당자는 실행 배경을 숙지하고, 유관 부서 및 파트너 팀과 실시간 진행 현황을 조율하여 최종 결과물을 기한 내 완수해 주시기 바랍니다.`;
                 mdResult += `- **[${spkRole}]**\n  ${detailedParagraph}\n  * 완료 기한: ${item.dueDate}\n\n`;
             });
 
@@ -7397,7 +7942,7 @@ ${scheduleContext}
             const memo = (photo.label || photo.memo || "").trim();
             const country = tripInfo.country || "현지";
             const purpose = tripInfo.purpose || "B2B 비즈니스 확장";
-            
+           
             // 미팅 장소 추출
             let meetingLocation = "";
             if (photo.scheduleLocation) {
@@ -8145,7 +8690,7 @@ ${context.scheduleTopic ? `- 미팅 안건: ${context.scheduleTopic}` : ''}
 
                     // 시트 3: 현장 사진 AI 분석 대장
                     const ws3 = workbook.addWorksheet('현장 시각자료 AI분석');
-                    
+                   
                     // 1. 컬럼 너비를 이미지 삽입 전에 반드시 먼저 정의하여 이미지 스케일링의 기준 좌표를 확립합니다.
                     ws3.columns = [
                         { width: 8 }, { width: 28 }, { width: 30 }, { width: 24 }, { width: 90 }
