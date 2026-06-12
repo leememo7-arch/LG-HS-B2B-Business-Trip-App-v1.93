@@ -1673,8 +1673,8 @@
                 <!-- 모달 헤더 -->
                 <div class="flex items-center justify-between px-5 pt-5 pb-3 border-b border-gray-100 flex-shrink-0">
                     <h3 class="text-sm font-bold text-gray-800 flex items-center gap-2">
-                        <i class="fa-solid fa-map-location-dot text-lgRed"></i>
-                        <span>미팅 장소 구글맵 검색</span>
+                        <i id="location-search-modal-icon" class="fa-solid fa-map-location-dot text-lgRed"></i>
+                        <span id="location-search-modal-title">미팅 장소 구글맵 검색</span>
                     </h3>
                     <button onclick="closeMeetingLocationSearchModal()"
                         class="text-gray-400 hover:text-gray-600 transition p-1">
@@ -3056,18 +3056,89 @@
 
             activeLocationTargetInputId = targetInputId;
 
-            // 검색창 초기화
+            const titleEl = document.getElementById("location-search-modal-title");
+            const iconEl = document.getElementById("location-search-modal-icon");
             const searchInput = document.getElementById("location-search-input");
+            const guideEl = document.getElementById("location-search-guide");
+
+            // 검색창 초기화
+            let existingVal = "";
+            const targetInput = document.getElementById(targetInputId);
+            if (targetInput) {
+                existingVal = targetInput.value.trim();
+            }
             if (searchInput) {
-                // 기존 기입되어 있던 장소명이 있다면 검색어로 자동 셋팅
-                const existingVal = document.getElementById(targetInputId).value.trim();
                 searchInput.value = existingVal;
+            }
+
+            // 가변 타이틀, 아이콘, 가이드 문구 처리
+            if (targetInputId === "hotel-name") {
+                if (titleEl) titleEl.innerText = "출장지 호텔 구글맵 검색";
+                if (iconEl) {
+                    iconEl.className = "fa-solid fa-hotel text-lgRed";
+                }
+                if (searchInput) searchInput.placeholder = "예: 시드니 쉐라톤, Oakwood Premier Sydney";
+                if (guideEl) {
+                    guideEl.innerHTML = `
+                        <i class="fa-solid fa-hotel text-3xl text-gray-300 mb-2"></i>
+                        <p class="text-xs font-medium">검색하고 싶은 호텔 이름 또는 주소를 입력하세요.</p>
+                        <p class="text-[10px] text-gray-400 leading-normal">Gemini AI와 내장 지리 정보가 구글 지도 상의<br>정확한 영문 주소 및 매칭 위치를 찾아 드립니다.</p>
+                    `;
+                }
+            } else {
+                if (titleEl) titleEl.innerText = "미팅 장소 구글맵 검색";
+                if (iconEl) {
+                    iconEl.className = "fa-solid fa-map-location-dot text-lgRed";
+                }
+                if (searchInput) searchInput.placeholder = "예: 시드니 오페라 하우스, Harvey Norman";
+                if (guideEl) {
+                    guideEl.innerHTML = `
+                        <i class="fa-solid fa-map-location-dot text-3xl text-gray-300 mb-2"></i>
+                        <p class="text-xs font-medium">검색하고 싶은 미팅 장소를 입력하세요.</p>
+                        <p class="text-[10px] text-gray-400 leading-normal">Gemini AI와 내장 지리 정보가 구글 지도 상의<br>정확한 영문 주소 및 매칭 위치를 찾아 드립니다.</p>
+                    `;
+                }
             }
 
             // 가이드 상태 표출
             document.getElementById("location-search-guide").classList.remove("hidden");
             document.getElementById("location-search-spinner").classList.add("hidden");
             document.getElementById("location-search-results-container").classList.add("hidden");
+
+            // UX 고도화: 만약 호텔 검색이고 검색창이 비어있다면, 그 도시의 추천 호텔 목록을 미리 렌더링
+            if (targetInputId === "hotel-name" && !existingVal) {
+                const tripInfo = JSON.parse(localStorage.getItem("LG_TRIP_INFO")) || DEFAULT_TRIP_INFO;
+                const recList = getRecommendedHotelsForCountry(tripInfo.country);
+                
+                const resultsContainer = document.getElementById("location-search-results");
+                if (resultsContainer && recList && recList.length > 0) {
+                    document.getElementById("location-search-guide").classList.add("hidden");
+                    
+                    resultsContainer.innerHTML = "";
+                    recList.forEach(loc => {
+                        const row = document.createElement("div");
+                        row.className = "flex items-start justify-between p-3 bg-gray-50 border border-gray-200 rounded-xl hover:bg-red-50/20 hover:border-red-100 transition duration-150 gap-2";
+                        row.innerHTML = `
+                            <div class="flex-1 min-w-0">
+                                <div class="flex items-center gap-1">
+                                    <span class="bg-red-50 text-lgRed text-[8px] font-bold px-1 py-0.5 rounded">추천</span>
+                                    <p class="font-bold text-gray-800 text-[11px] truncate">${loc.name}</p>
+                                </div>
+                                <p class="text-[9px] text-gray-500 mt-0.5 truncate leading-tight">${loc.address}</p>
+                                <a href="${loc.mapUrl || `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(loc.name)}`}" target="_blank" class="inline-flex items-center gap-0.5 text-[8px] text-blue-500 hover:underline mt-1 font-bold">
+                                    <i class="fa-solid fa-map-location-dot"></i> 지도 미리보기
+                                </a>
+                            </div>
+                            <button onclick="selectMeetingLocation('${loc.name.replace(/'/g, "\\'")}', '${loc.mapUrl || `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(loc.name)}`}')" type="button"
+                                class="bg-white hover:bg-lgRed hover:text-white border border-gray-200 hover:border-lgRed text-[10px] font-bold px-2.5 py-1.5 rounded-lg transition active:scale-95 flex-shrink-0">
+                                선택
+                            </button>
+                        `;
+                        resultsContainer.appendChild(row);
+                    });
+                    document.getElementById("location-search-results-container").classList.remove("hidden");
+                }
+            }
 
             modal.classList.remove("hidden");
             void modal.offsetWidth;
@@ -3156,7 +3227,7 @@
 
             // 2순위: 내장 Mock DB 및 가상 조합 매칭
             if (!results || results.length === 0) {
-                // 주요 랜드마크 Mock 데이터베이스
+                // 주요 랜드마크 및 체인 호텔 Mock 데이터베이스
                 const LOCAL_LANDMARK_DB = [
                     { name: "시드니 오페라 하우스", address: "Bennelong Point, Sydney NSW 2000, Australia", mapUrl: "https://www.google.com/maps/search/?api=1&query=Sydney+Opera+House" },
                     { name: "Harvey Norman 시드니", address: "Lidcombe Centre, 92 Parramatta Rd, Lidcombe NSW 2141, Australia", mapUrl: "https://www.google.com/maps/search/?api=1&query=Harvey+Norman+Lidcombe" },
@@ -3165,20 +3236,78 @@
                     { name: "LG전자 호주 법인 (LG Electronics Australia HQ)", address: "2 Wonderland Dr, Eastern Creek NSW 2766, Australia", mapUrl: "https://www.google.com/maps/search/?api=1&query=LG+Electronics+Australia+HQ" },
                     { name: "JFK 국제공항 (John F. Kennedy International Airport)", address: "Queens, NY 11430, United States", mapUrl: "https://www.google.com/maps/search/?api=1&query=JFK+Airport" },
                     { name: "인천국제공항 제1여객터미널", address: "인천광역시 중구 공항로 272", mapUrl: "https://www.google.com/maps/search/?api=1&query=인천국제공항" },
-                    { name: "타임스 스퀘어 뉴욕", address: "Manhattan, NY 10036, United States", mapUrl: "https://www.google.com/maps/search/?api=1&query=Times+Square+New+York" }
+                    { name: "타임스 스퀘어 뉴욕", address: "Manhattan, NY 10036, United States", mapUrl: "https://www.google.com/maps/search/?api=1&query=Times+Square+New+York" },
+                    // 1. 힐튼 (Hilton)
+                    { name: "Hilton Sydney (호주 시드니)", address: "488 George St, Sydney NSW 2000, Australia", mapUrl: "https://www.google.com/maps/search/?api=1&query=Hilton+Sydney" },
+                    { name: "Hilton Dubai Jumeirah (UAE 두바이)", address: "The Walk, Jumeirah Beach Residence, Dubai, United Arab Emirates", mapUrl: "https://www.google.com/maps/search/?api=1&query=Hilton+Dubai+Jumeirah" },
+                    { name: "Hilton San Francisco Union Square (미국 샌프란시스코)", address: "333 O'Farrell St, San Francisco, CA 94102, United States", mapUrl: "https://www.google.com/maps/search/?api=1&query=Hilton+San+Francisco+Union+Square" },
+                    { name: "콘래드 서울 (Conrad Seoul - Hilton 그룹)", address: "서울특별시 영등포구 국제금융로 10", mapUrl: "https://www.google.com/maps/search/?api=1&query=Conrad+Seoul" },
+                    // 2. 메리어트 (Marriott)
+                    { name: "Sydney Harbour Marriott Hotel (호주 시드니)", address: "30 Pitt St, Sydney NSW 2000, Australia", mapUrl: "https://www.google.com/maps/search/?api=1&query=Sydney+Harbour+Marriott+Hotel" },
+                    { name: "Marriott Resort Palm Jumeirah (UAE 두바이)", address: "Palm Jumeirah, Dubai, United Arab Emirates", mapUrl: "https://www.google.com/maps/search/?api=1&query=Marriott+Resort+Palm+Jumeirah" },
+                    { name: "San Francisco Marriott Marquis (미국 샌프란시스코)", address: "780 Mission St, San Francisco, CA 94103, United States", mapUrl: "https://www.google.com/maps/search/?api=1&query=San+Francisco+Marriott+Marquis" },
+                    { name: "JW 메리어트 호텔 서울", address: "서울특별시 서초구 신반포로 176", mapUrl: "https://www.google.com/maps/search/?api=1&query=JW+Marriott+Hotel+Seoul" },
+                    // 3. 하얏트 (Hyatt)
+                    { name: "Park Hyatt Sydney (호주 시드니)", address: "7 Hickson Rd, The Rocks NSW 2000, Australia", mapUrl: "https://www.google.com/maps/search/?api=1&query=Park+Hyatt+Sydney" },
+                    { name: "Grand Hyatt Dubai (UAE 두바이)", address: "Riyadh Street, Sheikh Rashid Rd, Dubai, United Arab Emirates", mapUrl: "https://www.google.com/maps/search/?api=1&query=Grand+Hyatt+Dubai" },
+                    { name: "Grand Hyatt San Francisco (미국 샌프란시스코)", address: "345 Stockton St, San Francisco, CA 94108, United States", mapUrl: "https://www.google.com/maps/search/?api=1&query=Grand+Hyatt+San+Francisco" },
+                    { name: "그랜드 하얏트 서울", address: "서울특별시 용산구 소월로 322", mapUrl: "https://www.google.com/maps/search/?api=1&query=Grand+Hyatt+Seoul" },
+                    // 4. 쉐라톤 (Sheraton)
+                    { name: "Sheraton Grand Sydney Hyde Park (호주 시드니)", address: "161 Elizabeth St, Sydney NSW 2000, Australia", mapUrl: "https://www.google.com/maps/search/?api=1&query=Sheraton+Grand+Sydney+Hyde+Park" },
+                    { name: "Sheraton Grand Hotel Dubai (UAE 두바이)", address: "Sheikh Zayed Road, Dubai, United Arab Emirates", mapUrl: "https://www.google.com/maps/search/?api=1&query=Sheraton+Grand+Hotel+Dubai" },
+                    { name: "Sheraton Fisherman's Wharf (미국 샌프란시스코)", address: "2500 Mason St, San Francisco, CA 94133, United States", mapUrl: "https://www.google.com/maps/search/?api=1&query=Sheraton+Fisherman's+Wharf+San+Francisco" },
+                    { name: "쉐라톤 그랜드 인천 호텔", address: "인천광역시 연수구 컨벤시아대로 153", mapUrl: "https://www.google.com/maps/search/?api=1&query=Sheraton+Grand+Incheon+Hotel" }
                 ];
 
                 // 입력 검색어로 필터링
                 const qLower = query.toLowerCase();
-                const filtered = LOCAL_LANDMARK_DB.filter(item =>
+                let filtered = LOCAL_LANDMARK_DB.filter(item =>
                     item.name.toLowerCase().includes(qLower) ||
                     item.address.toLowerCase().includes(qLower)
                 );
 
                 if (filtered.length > 0) {
                     results = filtered;
-                } else {
-                    // 완전히 일치하는 로컬 랜드마크가 없을 시 검색어를 바탕으로 즉석 생성
+                }
+
+                // 호텔 검색의 경우, 검색어 매칭이 없거나 1개 이하일 때 동적으로 주요 4대 출장지의 가상 호텔 지점들을 생성하여 리스팅합니다.
+                if (activeLocationTargetInputId === "hotel-name" && results.length <= 1) {
+                    const cleanBrand = query.replace(/(sydney|dubai|san francisco|seoul|시드니|두바이|샌프란시스코|서울|호텔|hotel)/gi, "").trim();
+                    const brandName = cleanBrand || query;
+
+                    const generatedBranches = [
+                        {
+                            name: `${brandName} Sydney (호주 시드니)`,
+                            address: `George St, Sydney, NSW 2000, Australia`,
+                            mapUrl: `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(brandName + " Sydney")}`
+                        },
+                        {
+                            name: `${brandName} Dubai (UAE 두바이)`,
+                            address: `Sheikh Zayed Road, Downtown Dubai, United Arab Emirates`,
+                            mapUrl: `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(brandName + " Dubai")}`
+                        },
+                        {
+                            name: `${brandName} San Francisco (미국 샌프란시스코)`,
+                            address: `Market St, San Francisco, CA 94103, United States`,
+                            mapUrl: `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(brandName + " San Francisco")}`
+                        },
+                        {
+                            name: `${brandName} 서울 강남 (대한민국 서울)`,
+                            address: `서울특별시 강남구 테헤란로 152`,
+                            mapUrl: `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(brandName + " 서울")}`
+                        }
+                    ];
+
+                    // 중복되지 않는 가상 지점을 결과 목록에 합산
+                    generatedBranches.forEach(branch => {
+                        if (!results.some(r => r.name.toLowerCase().includes(branch.name.toLowerCase()) || branch.name.toLowerCase().includes(r.name.toLowerCase()))) {
+                            results.push(branch);
+                        }
+                    });
+                }
+
+                // 일반 미팅장소 등 최종적으로 매칭이 하나도 없는 경우에만 단일 가상 결과 생성
+                if (results.length === 0) {
                     results = [
                         {
                             name: query,
@@ -5374,30 +5503,6 @@ LG전자 B2B 해외 출장 일정에 따른 호텔 예약을 요청 드립니다
             const hotelInfo = getHotelInfo();
             const tripInfo = JSON.parse(localStorage.getItem("LG_TRIP_INFO")) || DEFAULT_TRIP_INFO;
 
-            // 현재 출장 도시에 매칭되는 추천 호텔 가져오기
-            const recommendedList = getRecommendedHotelsForCountry(tripInfo.country);
-
-            // 추천 호텔 배지 리스트 HTML 빌드
-            let recommendedHtml = "";
-            if (recommendedList && recommendedList.length > 0) {
-                recommendedList.forEach(hotel => {
-                    // 현재 선택된 호텔과 일치하면 하이라이트 표시
-                    const isSelected = hotelInfo.hotelName === hotel.name;
-                    recommendedHtml += `
-                        <button onclick="selectRecommendedHotel('${hotel.name}', '${hotel.email}')" type="button"
-                            class="flex-shrink-0 px-3 py-1.5 rounded-xl text-[10px] font-bold border transition-all duration-200 ${isSelected
-                            ? 'bg-lgRed text-white border-lgRed shadow-sm scale-105'
-                            : 'bg-gray-50 text-gray-700 border-gray-200 hover:bg-gray-100'
-                        }">
-                            <i class="fa-solid fa-hotel mr-1 text-[9px]"></i>
-                            <span>${hotel.name}</span>
-                        </button>
-                    `;
-                });
-            } else {
-                recommendedHtml = `<p class="text-[10px] text-gray-400">추천 리스트가 없습니다.</p>`;
-            }
-
             // 계산된 투숙 박수 구하기
             const nights = calculateHotelNights(hotelInfo.checkIn, hotelInfo.checkOut);
 
@@ -5416,17 +5521,7 @@ LG전자 B2B 해외 출장 일정에 따른 호텔 예약을 요청 드립니다
                         </span>
                     </div>
 
-                    <!-- 2. 추천 비즈니스 호텔 스크롤 영역 -->
-                    <div class="mb-3">
-                        <label class="block text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-1.5">
-                            🏨 ${tripInfo.country ? tripInfo.country.split(' ')[0] : '출장지'} 추천 비즈니스 호텔 (클릭 시 자동 선택)
-                        </label>
-                        <div class="flex gap-1.5 overflow-x-auto pb-1.5 scrollbar-thin">
-                            ${recommendedHtml}
-                        </div>
-                    </div>
-
-                    <!-- 3. 상세 정보 입력 폼 -->
+                    <!-- 2. 상세 정보 입력 폼 -->
                     <div class="space-y-2.5">
                        
                         <!-- 호텔명 & 예약 이메일 -->
@@ -5434,7 +5529,7 @@ LG전자 B2B 해외 출장 일정에 따른 호텔 예약을 요청 드립니다
                             <div>
                                 <label class="block text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">호텔 이름</label>
                                 <div class="flex gap-1">
-                                    <input type="text" id="hotel-name" value="${hotelInfo.hotelName || ''}" oninput="saveCurrentHotelInfo()" placeholder="호텔명 직접 입력" class="premium-input">
+                                    <input type="text" id="hotel-name" value="${hotelInfo.hotelName || ''}" oninput="saveCurrentHotelInfo()" placeholder="호텔 검색 버튼을 눌러 위치를 찾으세요" class="premium-input">
                                     <button type="button" onclick="openMeetingLocationSearchModal('hotel-name')"
                                         class="bg-gray-100 hover:bg-gray-200 border text-[9px] font-bold px-2 rounded-lg transition active:scale-95 flex items-center gap-0.5 flex-shrink-0">
                                         <i class="fa-solid fa-magnifying-glass text-[8px]"></i> 검색
