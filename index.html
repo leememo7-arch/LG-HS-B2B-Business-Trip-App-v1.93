@@ -9002,15 +9002,15 @@ ${scheduleContext}
                 meetingLocation = photo.scheduleLocation;
             } else if (photo.scheduleId) {
                 const sched = schedules.find(s => s.id === photo.scheduleId);
-                if (sched && sched.location) {
-                    meetingLocation = sched.location;
+                if (sched && sched.map) {
+                    meetingLocation = getLocationNameFromUrl(sched.map);
                 }
             }
             if (!meetingLocation) {
                 // 일체의 schedule 정보가 없을 경우, 등록된 전체 일정 중 첫 미팅 장소를 참조
-                const validSched = schedules.find(s => s.location && !s.partner.includes("출국") && !s.partner.includes("귀국"));
+                const validSched = schedules.find(s => s.map && !s.partner.includes("출국") && !s.partner.includes("귀국"));
                 if (validSched) {
-                    meetingLocation = validSched.location;
+                    meetingLocation = getLocationNameFromUrl(validSched.map);
                 }
             }
             if (!meetingLocation) {
@@ -9607,7 +9607,7 @@ ${context.scheduleTopic ? `- 미팅 안건: ${context.scheduleTopic}` : ''}
                         scheduleDay: s.day,
                         schedulePartner: s.partner,
                         scheduleTopic: s.topic,
-                        scheduleLocation: s.location
+                        scheduleLocation: getLocationNameFromUrl(s.map)
                     });
                 });
             });
@@ -9849,10 +9849,9 @@ ${context.scheduleTopic ? `- 미팅 안건: ${context.scheduleTopic}` : ''}
                     // 2. 텍스트 데이터를 추가하고 각 사진행의 높이를 120pt로 선제 정의합니다.
                     for (let idx = 0; idx < receiptPhotos.length; idx++) {
                         const ph = receiptPhotos[idx];
-                        const rowNumber = 5 + idx;
                         const displayAmount = `${ph.currency || 'USD'} ${Number(ph.amount || 0).toLocaleString()}`;
 
-                        ws3.addRow([
+                        const addedRow = ws3.addRow([
                             idx + 1,
                             ph.date || "미기입",
                             ph.category || "기타",
@@ -9860,7 +9859,8 @@ ${context.scheduleTopic ? `- 미팅 안건: ${context.scheduleTopic}` : ''}
                             displayAmount,
                             "" // F열은 이미지 자리
                         ]);
-                        ws3.getRow(rowNumber).height = 150; // 영수증 이미지를 위해 행 높이 충분히 확장
+                        addedRow.height = 150; // 영수증 이미지를 위해 행 높이 충분히 확장
+                        ph.excelRowNumber = addedRow.number;
                     }
 
                     // 2-1. 경비 합계 요약 계산 및 추가
@@ -9876,7 +9876,8 @@ ${context.scheduleTopic ? `- 미팅 안건: ${context.scheduleTopic}` : ''}
                         sumParts.push(`${cur} ${sums[cur].toLocaleString()}`);
                     }
 
-                    const summaryRowNumber = 5 + receiptPhotos.length;
+                    const summaryRow = ws3.addRow([]);
+                    const summaryRowNumber = summaryRow.number;
                     ws3.mergeCells(`A${summaryRowNumber}:D${summaryRowNumber}`);
                     ws3.getCell(`A${summaryRowNumber}`).value = "총 지출 합계 (Total Expenses)";
                     ws3.getCell(`A${summaryRowNumber}`).font = { name: '맑은 고딕', size: 10, bold: true };
@@ -9886,7 +9887,7 @@ ${context.scheduleTopic ? `- 미팅 안건: ${context.scheduleTopic}` : ''}
                     ws3.getCell(`E${summaryRowNumber}`).value = sumParts.join("  /  ") || "등록된 경비 없음";
                     ws3.getCell(`E${summaryRowNumber}`).font = { name: '맑은 고딕', size: 10, bold: true, color: { argb: 'FFA50034' } };
                     ws3.getCell(`E${summaryRowNumber}`).alignment = { horizontal: 'left', vertical: 'middle' };
-                    ws3.getRow(summaryRowNumber).height = 28;
+                    summaryRow.height = 28;
 
                     // 3. 셀 스타일 및 테두리 정렬 처리
                     ws3.eachRow((row, rowNumber) => {
@@ -9922,7 +9923,7 @@ ${context.scheduleTopic ? `- 미팅 안건: ${context.scheduleTopic}` : ''}
 
                     for (let idx = 0; idx < receiptPhotos.length; idx++) {
                         const ph = receiptPhotos[idx];
-                        const rowNumber = 5 + idx;
+                        const rowNumber = ph.excelRowNumber || (5 + idx);
 
                         try {
                             const dataUrl = ph.dataUrl;
@@ -10018,7 +10019,6 @@ ${context.scheduleTopic ? `- 미팅 안건: ${context.scheduleTopic}` : ''}
                     // 2. 텍스트 데이터를 추가하고 각 사진행의 높이를 120pt로 선제 정의합니다.
                     for (let idx = 0; idx < schedulePhotos.length; idx++) {
                         const ph = schedulePhotos[idx];
-                        const rowNumber = 5 + idx;
 
                         // AI 분석 결과 가져오기 (Gemini 결과가 없으면 로컬 지능형 폴백 결과 생성)
                         let analysis = aiAnalysisMap[ph.id];
@@ -10031,7 +10031,7 @@ ${context.scheduleTopic ? `- 미팅 안건: ${context.scheduleTopic}` : ''}
                                     photoObjFromDb.scheduleDay = sched.day;
                                     photoObjFromDb.schedulePartner = sched.partner;
                                     photoObjFromDb.scheduleTopic = sched.topic;
-                                    photoObjFromDb.scheduleLocation = sched.location;
+                                    photoObjFromDb.scheduleLocation = getLocationNameFromUrl(sched.map);
                                 }
                                 analysis = generateLocalPhotoAnalysis(photoObjFromDb, tripInfo, schedules, meetings);
                             } else {
@@ -10041,14 +10041,15 @@ ${context.scheduleTopic ? `- 미팅 안건: ${context.scheduleTopic}` : ''}
 
                         const meetingInfo = `파트너: ${ph.schedulePartner || '미지정'}\n주제: ${ph.scheduleTopic || '미지정'}`;
 
-                        ws4.addRow([
+                        const addedRow = ws4.addRow([
                             idx + 1,
                             ph.scheduleDay || "미기입",
                             meetingInfo,
                             "", // D열은 이미지 자리
                             analysis
                         ]);
-                        ws4.getRow(rowNumber).height = 150; // 이미지를 위해 행 높이 충분히 확장
+                        addedRow.height = 150; // 이미지를 위해 행 높이 충분히 확장
+                        ph.excelRowNumber = addedRow.number;
                     }
 
                     // 3. 셀 스타일 및 테두리 정렬 처리
@@ -10075,7 +10076,7 @@ ${context.scheduleTopic ? `- 미팅 안건: ${context.scheduleTopic}` : ''}
 
                     for (let idx = 0; idx < schedulePhotos.length; idx++) {
                         const ph = schedulePhotos[idx];
-                        const rowNumber = 5 + idx;
+                        const rowNumber = ph.excelRowNumber || (5 + idx);
 
                         try {
                             const dataUrl = ph.dataUrl;
@@ -10287,7 +10288,7 @@ ${context.scheduleTopic ? `- 미팅 안건: ${context.scheduleTopic}` : ''}
                                         photoObjFromDb.scheduleDay = sched.day;
                                         photoObjFromDb.schedulePartner = sched.partner;
                                         photoObjFromDb.scheduleTopic = sched.topic;
-                                        photoObjFromDb.scheduleLocation = sched.location;
+                                        photoObjFromDb.scheduleLocation = getLocationNameFromUrl(sched.map);
                                     }
                                     analysis1 = generateLocalPhotoAnalysis(photoObjFromDb, tripInfo, schedules, meetings);
                                 } else {
@@ -10309,7 +10310,7 @@ ${context.scheduleTopic ? `- 미팅 안건: ${context.scheduleTopic}` : ''}
                                     sizing: { type: 'contain', w: 4.2, h: 2.3 }
                                 };
                                 if (pptImgData1 && pptImgData1.startsWith('data:')) {
-                                    imgConfig1.data = pptImgData1;
+                                    imgConfig1.data = pptImgData1.replace(/^data:/, '');
                                 } else {
                                     imgConfig1.path = ph1.dataUrl;
                                 }
@@ -10359,7 +10360,7 @@ ${context.scheduleTopic ? `- 미팅 안건: ${context.scheduleTopic}` : ''}
                                             photoObjFromDb.scheduleDay = sched.day;
                                             photoObjFromDb.schedulePartner = sched.partner;
                                             photoObjFromDb.scheduleTopic = sched.topic;
-                                            photoObjFromDb.scheduleLocation = sched.location;
+                                            photoObjFromDb.scheduleLocation = getLocationNameFromUrl(sched.map);
                                         }
                                         analysis2 = generateLocalPhotoAnalysis(photoObjFromDb, tripInfo, schedules, meetings);
                                     } else {
@@ -10381,7 +10382,7 @@ ${context.scheduleTopic ? `- 미팅 안건: ${context.scheduleTopic}` : ''}
                                         sizing: { type: 'contain', w: 4.2, h: 2.3 }
                                     };
                                     if (pptImgData2 && pptImgData2.startsWith('data:')) {
-                                        imgConfig2.data = pptImgData2;
+                                        imgConfig2.data = pptImgData2.replace(/^data:/, '');
                                     } else {
                                         imgConfig2.path = ph2.dataUrl;
                                     }
@@ -10535,7 +10536,7 @@ ${context.scheduleTopic ? `- 미팅 안건: ${context.scheduleTopic}` : ''}
                                     sizing: { type: 'contain', w: 4.2, h: 2.6 }
                                 };
                                 if (pptImgData1 && pptImgData1.startsWith('data:')) {
-                                    recvImgConfig1.data = pptImgData1;
+                                    recvImgConfig1.data = pptImgData1.replace(/^data:/, '');
                                 } else {
                                     recvImgConfig1.path = ph1.dataUrl;
                                 }
@@ -10590,7 +10591,7 @@ ${context.scheduleTopic ? `- 미팅 안건: ${context.scheduleTopic}` : ''}
                                         sizing: { type: 'contain', w: 4.2, h: 2.6 }
                                     };
                                     if (pptImgData2 && pptImgData2.startsWith('data:')) {
-                                        recvImgConfig2.data = pptImgData2;
+                                        recvImgConfig2.data = pptImgData2.replace(/^data:/, '');
                                     } else {
                                         recvImgConfig2.path = ph2.dataUrl;
                                     }
