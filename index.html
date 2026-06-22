@@ -2036,6 +2036,73 @@
             });
         }
 
+        /**
+         * 여러 사진 객체를 단일 트랜잭션으로 일괄 저장합니다.
+         * 다중 사진(예: 10장)을 Promise.all로 병렬 저장할 때 발생하던
+         * 1) IndexedDB 동시 트랜잭션 경합 2) localStorage read-modify-write
+         * lost-update(마지막 쓰기가 이전 쓰기를 덮어써 일부 사진이 누락되는 현상)
+         * 문제를 모두 제거하기 위해, 모든 사진을 한 번의 트랜잭션/한 번의 쓰기로 처리합니다.
+         */
+        function savePhotosBatchToDB(photoArray) {
+            return new Promise((resolve, reject) => {
+                if (!Array.isArray(photoArray) || photoArray.length === 0) {
+                    resolve();
+                    return;
+                }
+
+                // db가 없을 때: localStorage 폴백 — 단 한 번만 읽고, 모두 합쳐, 한 번만 쓴다.
+                if (!db) {
+                    try {
+                        const fallback = localStorage.getItem("LG_TRIP_PHOTOS_FALLBACK");
+                        const list = fallback ? JSON.parse(fallback) : [];
+                        photoArray.forEach(photoObj => {
+                            const existingIdx = list.findIndex(p => p.id === photoObj.id);
+                            if (existingIdx > -1) {
+                                list[existingIdx] = photoObj;
+                            } else {
+                                list.push(photoObj);
+                            }
+                        });
+                        localStorage.setItem("LG_TRIP_PHOTOS_FALLBACK", JSON.stringify(list));
+                        resolve();
+                    } catch (err) {
+                        reject("LocalStorage quota exceeded or write failed");
+                    }
+                    return;
+                }
+
+                // IndexedDB: 단일 readwrite 트랜잭션 안에서 모든 put을 수행.
+                // 트랜잭션 자체의 complete/error로 전체 성공/실패를 판정한다.
+                const transaction = db.transaction(["photos"], "readwrite");
+                const store = transaction.objectStore("photos");
+                let hadError = null;
+
+                transaction.oncomplete = function () {
+                    resolve();
+                };
+                transaction.onerror = function (e) {
+                    reject(hadError || (e.target && e.target.error) || new Error("일괄 저장 트랜잭션 실패"));
+                };
+                transaction.onabort = function (e) {
+                    reject(hadError || (e.target && e.target.error) || new Error("일괄 저장 트랜잭션 중단"));
+                };
+
+                photoArray.forEach(photoObj => {
+                    try {
+                        const req = store.put(photoObj);
+                        req.onerror = function (e) {
+                            hadError = e.target.error;
+                            // 개별 put 실패 시 트랜잭션을 명시적으로 중단하여 onabort에서 처리
+                            try { transaction.abort(); } catch (_) { /* 이미 중단됨 */ }
+                        };
+                    } catch (err) {
+                        hadError = err;
+                        try { transaction.abort(); } catch (_) { /* 이미 중단됨 */ }
+                    }
+                });
+            });
+        }
+
         // 개별 사진 객체 영구 삭제
         function deletePhotoFromDB(id) {
             return new Promise((resolve, reject) => {
@@ -5882,41 +5949,55 @@ LG전자 B2B 해외 출장 일정에 따른 호텔 예약을 요청 드립니다
                 return;
             }
 
-            const uploadPromises = fileList.map(async (file, idx) => {
+            // 1단계: 압축/디코딩은 DB를 건드리지 않으므로 병렬로 수행해도 안전하다.
+            //         각 사진의 dataUrl만 먼저 확보하고, 저장은 뒤에서 한 번에 처리한다.
+            const buildPromises = fileList.map(async (file, idx) => {
+                // ID 충돌 방지: 동일 밀리초 + 동일 idx 조합에서도 절대 겹치지 않도록
+                // 다중 난수 토큰을 결합한다.
+                const uniqueId = `photo-${Date.now()}-${idx}-${Math.random().toString(36).substr(2, 9)}-${Math.random().toString(36).substr(2, 9)}`;
+                let dataUrl;
                 try {
-                    const compressedBase64 = await resizeAndCompressImage(file, 800, 0.6); // 퀄리티 0.6 압축 적용
-                    const photoObj = {
-                        id: `photo-${Date.now()}-${idx}-${Math.random().toString(36).substr(2, 9)}`,
-                        dataUrl: compressedBase64,
-                        memo: "",
-                        type: "schedule",
-                        scheduleId: scheduleId
-                    };
-                    await savePhotoToDB(photoObj);
+                    dataUrl = await resizeAndCompressImage(file, 800, 0.6); // 퀄리티 0.6 압축 적용
                 } catch (err) {
                     console.error("일정 사진 압축 실패, 원본 보존 우회:", err);
-                    const fallbackBase64 = await new Promise((resolve, reject) => {
+                    dataUrl = await new Promise((resolve, reject) => {
                         const reader = new FileReader();
-                        reader.onload = function (e) {
-                            resolve(e.target.result);
-                        };
-                        reader.onerror = function (err) {
-                            reject(err);
-                        };
+                        reader.onload = function (e) { resolve(e.target.result); };
+                        reader.onerror = function (e) { reject(e); };
                         reader.readAsDataURL(file);
                     });
-                    const photoObj = {
-                        id: `photo-${Date.now()}-${idx}-${Math.random().toString(36).substr(2, 9)}`,
-                        dataUrl: fallbackBase64,
-                        memo: "",
-                        type: "schedule",
-                        scheduleId: scheduleId
-                    };
-                    await savePhotoToDB(photoObj);
                 }
+                return {
+                    id: uniqueId,
+                    dataUrl: dataUrl,
+                    memo: "",
+                    type: "schedule",
+                    scheduleId: scheduleId
+                };
             });
 
-            await Promise.all(uploadPromises);
+            // 일부 파일에서 압축/읽기가 완전히 실패해도 나머지는 저장되도록 allSettled 사용
+            const settled = await Promise.allSettled(buildPromises);
+            const photoObjs = settled
+                .filter(r => r.status === "fulfilled" && r.value && r.value.dataUrl)
+                .map(r => r.value);
+
+            const failedCount = settled.length - photoObjs.length;
+
+            // 2단계: 확보된 모든 사진을 단일 트랜잭션으로 일괄 저장 (경합/덮어쓰기 방지)
+            if (photoObjs.length > 0) {
+                try {
+                    await savePhotosBatchToDB(photoObjs);
+                } catch (err) {
+                    console.error("일정 사진 일괄 저장 실패:", err);
+                    alert("사진 저장 중 오류가 발생했습니다. 저장 공간(용량)을 확인한 뒤 다시 시도해 주세요.");
+                }
+            }
+
+            if (failedCount > 0) {
+                alert(`⚠️ ${failedCount}장의 사진을 처리하지 못했습니다. 해당 파일을 다시 업로드해 주세요.`);
+            }
+
             await renderSchedule();
         }
 
@@ -8582,47 +8663,56 @@ ${scheduleContext}
                 return;
             }
 
-            const uploadPromises = files.map(async (file, idx) => {
+            const todayStr = new Date().toISOString().split('T')[0];
+
+            // 1단계: 압축/디코딩(병렬, DB 미접근)으로 각 사진의 dataUrl 확보
+            const buildPromises = files.map(async (file, idx) => {
+                const uniqueId = `photo-${Date.now()}-${idx}-${Math.random().toString(36).substr(2, 9)}-${Math.random().toString(36).substr(2, 9)}`;
+                let dataUrl;
                 try {
-                    const compressedBase64 = await resizeAndCompressImage(file, 800, 0.6); // 퀄리티 0.6 압축 적용
-                    const photoObj = {
-                        id: `photo-${Date.now()}-${idx}-${Math.random().toString(36).substr(2, 9)}`,
-                        dataUrl: compressedBase64,
-                        memo: "",
-                        type: "field",
-                        category: "식비", // 기본 카테고리 식비 지정
-                        amount: "",      // 빈 금액
-                        currency: "USD",  // 기본 통화 USD 지정 (출장지 용도)
-                        date: new Date().toISOString().split('T')[0] // 오늘 날짜 기본 지정
-                    };
-                    await savePhotoToDB(photoObj);
+                    dataUrl = await resizeAndCompressImage(file, 800, 0.6); // 퀄리티 0.6 압축 적용
                 } catch (err) {
                     console.warn(`압축 실패(원본 보존 우회): ${file.name}`, err);
-                    const fallbackBase64 = await new Promise((resolve, reject) => {
+                    dataUrl = await new Promise((resolve, reject) => {
                         const reader = new FileReader();
-                        reader.onload = function (ev) {
-                            resolve(ev.target.result);
-                        };
-                        reader.onerror = function (err) {
-                            reject(err);
-                        };
+                        reader.onload = function (ev) { resolve(ev.target.result); };
+                        reader.onerror = function (ev) { reject(ev); };
                         reader.readAsDataURL(file);
                     });
-                    const photoObj = {
-                        id: `photo-${Date.now()}-${idx}-${Math.random().toString(36).substr(2, 9)}`,
-                        dataUrl: fallbackBase64,
-                        memo: "",
-                        type: "field",
-                        category: "식비",
-                        amount: "",
-                        currency: "USD",
-                        date: new Date().toISOString().split('T')[0]
-                    };
-                    await savePhotoToDB(photoObj);
                 }
+                return {
+                    id: uniqueId,
+                    dataUrl: dataUrl,
+                    memo: "",
+                    type: "field",
+                    category: "식비", // 기본 카테고리 식비 지정
+                    amount: "",      // 빈 금액
+                    currency: "USD",  // 기본 통화 USD 지정 (출장지 용도)
+                    date: todayStr // 오늘 날짜 기본 지정
+                };
             });
 
-            await Promise.all(uploadPromises);
+            const settled = await Promise.allSettled(buildPromises);
+            const photoObjs = settled
+                .filter(r => r.status === "fulfilled" && r.value && r.value.dataUrl)
+                .map(r => r.value);
+
+            const failedCount = settled.length - photoObjs.length;
+
+            // 2단계: 단일 트랜잭션 일괄 저장 (병렬 저장 경합/덮어쓰기 방지)
+            if (photoObjs.length > 0) {
+                try {
+                    await savePhotosBatchToDB(photoObjs);
+                } catch (err) {
+                    console.error("영수증 일괄 저장 실패:", err);
+                    alert("영수증 저장 중 오류가 발생했습니다. 저장 공간(용량)을 확인한 뒤 다시 시도해 주세요.");
+                }
+            }
+
+            if (failedCount > 0) {
+                alert(`⚠️ ${failedCount}장의 영수증을 처리하지 못했습니다. 해당 파일을 다시 업로드해 주세요.`);
+            }
+
             await renderPhotos();
             e.target.value = "";
         }
