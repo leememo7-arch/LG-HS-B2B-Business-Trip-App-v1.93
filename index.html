@@ -9909,6 +9909,17 @@ ${context.scheduleTopic ? `- 미팅 안건: ${context.scheduleTopic}` : ''}
                     });
 
                     // 4. 영수증 이미지 삽입 진행
+                    // ExcelJS oneCell 앵커는 이미지를 지정 픽셀 크기 그대로 그리므로,
+                    // 각 이미지의 원본 비율을 측정해 셀 박스 안에 'contain'(비율 유지) 방식으로
+                    // 들어가도록 크기를 동적 계산하고, 남는 여백만큼 시작 좌표를 밀어 중앙에 배치한다.
+                    // 이렇게 하면 세로/가로형 영수증이 찌그러지거나 잘리거나 인접 행을 침범해
+                    // 다른 사진을 가리는 문제가 모두 사라진다.
+                    const RECEIPT_COL_INDEX = 5;          // F열 (0-base)
+                    const RECEIPT_BOX_W = 224;            // F열(너비34) 내 가용 가로 픽셀 (여백 포함)
+                    const RECEIPT_BOX_H = 190;            // 행 높이(150pt) 내 가용 세로 픽셀 (여백 포함)
+                    const RECEIPT_COL_TOTAL_W = 238;      // F열 전체 픽셀 폭 (너비34 ≈ 238px)
+                    const RECEIPT_ROW_TOTAL_H = 200;      // 행 전체 픽셀 높이 (150pt ≈ 200px)
+
                     for (let idx = 0; idx < receiptPhotos.length; idx++) {
                         const ph = receiptPhotos[idx];
                         const rowNumber = 5 + idx;
@@ -9936,18 +9947,27 @@ ${context.scheduleTopic ? `- 미팅 안건: ${context.scheduleTopic}` : ''}
                                     ext = 'gif';
                                 }
 
+                                // 원본 비율 측정 후 박스 안에 맞는 크기 계산 (contain)
+                                const dim = await getImageDimensions(dataUrl);
+                                const ratio = Math.min(RECEIPT_BOX_W / dim.width, RECEIPT_BOX_H / dim.height);
+                                const drawW = Math.max(1, Math.round(dim.width * ratio));
+                                const drawH = Math.max(1, Math.round(dim.height * ratio));
+
+                                // 셀 내 중앙 정렬을 위한 좌상단 오프셋 (픽셀 → 열/행 소수 좌표)
+                                const offsetXcol = ((RECEIPT_COL_TOTAL_W - drawW) / 2) / RECEIPT_COL_TOTAL_W;
+                                const offsetYrow = ((RECEIPT_ROW_TOTAL_H - drawH) / 2) / RECEIPT_ROW_TOTAL_H;
+
                                 const imageId = workbook.addImage({
                                     base64: base64Data,
                                     extension: ext
                                 });
 
-                                // F열 (col index 5)에 영수증 이미지 삽입
-                                // twoCell 앵커는 이미지를 셀 경계에 강제로 묶어 세로형 영수증이 잘리거나
-                                // 인접 셀에 가려지는 문제가 있어, oneCell 앵커 + 명시적 픽셀 크기(ext)로 삽입한다.
-                                // 셀 영역(F열 폭/행 높이)보다 약간 작게 배치하여 여백을 두고 잘림을 방지한다.
                                 ws3.addImage(imageId, {
-                                    tl: { col: 5.07, row: (rowNumber - 1) + 0.08 },
-                                    ext: { width: 215, height: 188 },
+                                    tl: {
+                                        col: RECEIPT_COL_INDEX + Math.max(0, offsetXcol),
+                                        row: (rowNumber - 1) + Math.max(0, offsetYrow)
+                                    },
+                                    ext: { width: drawW, height: drawH },
                                     editAs: 'oneCell'
                                 });
                             } else {
@@ -10046,7 +10066,13 @@ ${context.scheduleTopic ? `- 미팅 안건: ${context.scheduleTopic}` : ''}
                         }
                     });
 
-                    // 4. 현장 이미지 삽입 진행
+                    // 4. 현장 이미지 삽입 진행 (비율 유지 contain + 셀 내 중앙 정렬)
+                    const VISUAL_COL_INDEX = 3;           // D열 (0-base)
+                    const VISUAL_BOX_W = 224;             // D열(너비34) 내 가용 가로 픽셀
+                    const VISUAL_BOX_H = 190;             // 행 높이(150pt) 내 가용 세로 픽셀
+                    const VISUAL_COL_TOTAL_W = 238;       // D열 전체 픽셀 폭
+                    const VISUAL_ROW_TOTAL_H = 200;       // 행 전체 픽셀 높이
+
                     for (let idx = 0; idx < schedulePhotos.length; idx++) {
                         const ph = schedulePhotos[idx];
                         const rowNumber = 5 + idx;
@@ -10074,16 +10100,25 @@ ${context.scheduleTopic ? `- 미팅 안건: ${context.scheduleTopic}` : ''}
                                     ext = 'gif';
                                 }
 
+                                const dim = await getImageDimensions(dataUrl);
+                                const ratio = Math.min(VISUAL_BOX_W / dim.width, VISUAL_BOX_H / dim.height);
+                                const drawW = Math.max(1, Math.round(dim.width * ratio));
+                                const drawH = Math.max(1, Math.round(dim.height * ratio));
+
+                                const offsetXcol = ((VISUAL_COL_TOTAL_W - drawW) / 2) / VISUAL_COL_TOTAL_W;
+                                const offsetYrow = ((VISUAL_ROW_TOTAL_H - drawH) / 2) / VISUAL_ROW_TOTAL_H;
+
                                 const imageId = workbook.addImage({
                                     base64: base64Data,
                                     extension: ext
                                 });
 
-                                // D열 (col index 3)에 현장 이미지 삽입
-                                // twoCell 앵커의 잘림/가림 문제를 피하기 위해 oneCell 앵커 + 명시적 크기(ext) 사용
                                 ws4.addImage(imageId, {
-                                    tl: { col: 3.07, row: (rowNumber - 1) + 0.08 },
-                                    ext: { width: 215, height: 188 },
+                                    tl: {
+                                        col: VISUAL_COL_INDEX + Math.max(0, offsetXcol),
+                                        row: (rowNumber - 1) + Math.max(0, offsetYrow)
+                                    },
+                                    ext: { width: drawW, height: drawH },
                                     editAs: 'oneCell'
                                 });
                             } else {
@@ -10226,14 +10261,20 @@ ${context.scheduleTopic ? `- 미팅 안건: ${context.scheduleTopic}` : ''}
                             );
 
                             // 첫 번째 시각 자료 (좌측 배치)
+                            // PptxGenJS는 'data:image/...;base64,' 전체 형식을 요구한다.
+                            // data: 접두어가 누락되면 일부 환경에서 이미지가 빈 칸으로 렌더링되므로
+                            // 원본 dataUrl이 data:로 시작하면 그대로 쓰고, 아니면 접두어를 보강한다.
                             let pptImgData1 = '';
-                            const parts1 = ph1.dataUrl.split(';base64,');
-                            if (parts1.length === 2) {
-                                const mime = parts1[0].replace(/^data:/, '');
-                                const b64 = parts1[1];
-                                pptImgData1 = `${mime};base64,${b64}`;
+                            if (ph1.dataUrl && ph1.dataUrl.startsWith('data:')) {
+                                pptImgData1 = ph1.dataUrl;
                             } else {
-                                pptImgData1 = ph1.dataUrl.replace(/^data:/, '');
+                                const parts1 = (ph1.dataUrl || '').split(';base64,');
+                                if (parts1.length === 2) {
+                                    const mime = parts1[0].replace(/^data:/, '');
+                                    pptImgData1 = `data:${mime};base64,${parts1[1]}`;
+                                } else {
+                                    pptImgData1 = ph1.dataUrl;
+                                }
                             }
 
                             // AI 분석 내용 가져오기
@@ -10267,7 +10308,7 @@ ${context.scheduleTopic ? `- 미팅 안건: ${context.scheduleTopic}` : ''}
                                     x: 0.5, y: 0.8, w: 4.2, h: 2.3,
                                     sizing: { type: 'contain', w: 4.2, h: 2.3 }
                                 };
-                                if (ph1.dataUrl.startsWith('data:')) {
+                                if (pptImgData1 && pptImgData1.startsWith('data:')) {
                                     imgConfig1.data = pptImgData1;
                                 } else {
                                     imgConfig1.path = ph1.dataUrl;
@@ -10297,13 +10338,16 @@ ${context.scheduleTopic ? `- 미팅 안건: ${context.scheduleTopic}` : ''}
                             // 두 번째 시각 자료 (우측 배치)
                             if (ph2) {
                                 let pptImgData2 = '';
-                                const parts2 = ph2.dataUrl.split(';base64,');
-                                if (parts2.length === 2) {
-                                    const mime = parts2[0].replace(/^data:/, '');
-                                    const b64 = parts2[1];
-                                    pptImgData2 = `${mime};base64,${b64}`;
+                                if (ph2.dataUrl && ph2.dataUrl.startsWith('data:')) {
+                                    pptImgData2 = ph2.dataUrl;
                                 } else {
-                                    pptImgData2 = ph2.dataUrl.replace(/^data:/, '');
+                                    const parts2 = (ph2.dataUrl || '').split(';base64,');
+                                    if (parts2.length === 2) {
+                                        const mime = parts2[0].replace(/^data:/, '');
+                                        pptImgData2 = `data:${mime};base64,${parts2[1]}`;
+                                    } else {
+                                        pptImgData2 = ph2.dataUrl;
+                                    }
                                 }
 
                                 let analysis2 = aiAnalysisMap[ph2.id];
@@ -10336,7 +10380,7 @@ ${context.scheduleTopic ? `- 미팅 안건: ${context.scheduleTopic}` : ''}
                                         x: 5.3, y: 0.8, w: 4.2, h: 2.3,
                                         sizing: { type: 'contain', w: 4.2, h: 2.3 }
                                     };
-                                    if (ph2.dataUrl.startsWith('data:')) {
+                                    if (pptImgData2 && pptImgData2.startsWith('data:')) {
                                         imgConfig2.data = pptImgData2;
                                     } else {
                                         imgConfig2.path = ph2.dataUrl;
@@ -10468,13 +10512,16 @@ ${context.scheduleTopic ? `- 미팅 안건: ${context.scheduleTopic}` : ''}
 
                             // 첫 번째 영수증 (좌측 배치)
                             let pptImgData1 = '';
-                            const parts1 = ph1.dataUrl.split(';base64,');
-                            if (parts1.length === 2) {
-                                const mime = parts1[0].replace(/^data:/, '');
-                                const b64 = parts1[1];
-                                pptImgData1 = `${mime};base64,${b64}`;
+                            if (ph1.dataUrl && ph1.dataUrl.startsWith('data:')) {
+                                pptImgData1 = ph1.dataUrl;
                             } else {
-                                pptImgData1 = ph1.dataUrl.replace(/^data:/, '');
+                                const parts1 = (ph1.dataUrl || '').split(';base64,');
+                                if (parts1.length === 2) {
+                                    const mime = parts1[0].replace(/^data:/, '');
+                                    pptImgData1 = `data:${mime};base64,${parts1[1]}`;
+                                } else {
+                                    pptImgData1 = ph1.dataUrl;
+                                }
                             }
 
                             try {
@@ -10483,11 +10530,16 @@ ${context.scheduleTopic ? `- 미팅 안건: ${context.scheduleTopic}` : ''}
                                     x: 0.4, y: 0.7, w: 4.4, h: 2.8,
                                     fill: 'FFFFFF', line: { color: 'E5E5E5', width: 1 }
                                 });
-                                photoSlide.addImage({
-                                    data: pptImgData1,
+                                const recvImgConfig1 = {
                                     x: 0.5, y: 0.8, w: 4.2, h: 2.6,
                                     sizing: { type: 'contain', w: 4.2, h: 2.6 }
-                                });
+                                };
+                                if (pptImgData1 && pptImgData1.startsWith('data:')) {
+                                    recvImgConfig1.data = pptImgData1;
+                                } else {
+                                    recvImgConfig1.path = ph1.dataUrl;
+                                }
+                                photoSlide.addImage(recvImgConfig1);
 
                                 // 좌측 영수증 메타 정보 기입 카드
                                 photoSlide.addShape(pptx.shapes.ROUNDED_RECTANGLE, {
@@ -10515,13 +10567,16 @@ ${context.scheduleTopic ? `- 미팅 안건: ${context.scheduleTopic}` : ''}
                             // 두 번째 영수증 (우측 배치)
                             if (ph2) {
                                 let pptImgData2 = '';
-                                const parts2 = ph2.dataUrl.split(';base64,');
-                                if (parts2.length === 2) {
-                                    const mime = parts2[0].replace(/^data:/, '');
-                                    const b64 = parts2[1];
-                                    pptImgData2 = `${mime};base64,${b64}`;
+                                if (ph2.dataUrl && ph2.dataUrl.startsWith('data:')) {
+                                    pptImgData2 = ph2.dataUrl;
                                 } else {
-                                    pptImgData2 = ph2.dataUrl.replace(/^data:/, '');
+                                    const parts2 = (ph2.dataUrl || '').split(';base64,');
+                                    if (parts2.length === 2) {
+                                        const mime = parts2[0].replace(/^data:/, '');
+                                        pptImgData2 = `data:${mime};base64,${parts2[1]}`;
+                                    } else {
+                                        pptImgData2 = ph2.dataUrl;
+                                    }
                                 }
 
                                 try {
@@ -10530,11 +10585,16 @@ ${context.scheduleTopic ? `- 미팅 안건: ${context.scheduleTopic}` : ''}
                                         x: 5.2, y: 0.7, w: 4.4, h: 2.8,
                                         fill: 'FFFFFF', line: { color: 'E5E5E5', width: 1 }
                                     });
-                                    photoSlide.addImage({
-                                        data: pptImgData2,
+                                    const recvImgConfig2 = {
                                         x: 5.3, y: 0.8, w: 4.2, h: 2.6,
                                         sizing: { type: 'contain', w: 4.2, h: 2.6 }
-                                    });
+                                    };
+                                    if (pptImgData2 && pptImgData2.startsWith('data:')) {
+                                        recvImgConfig2.data = pptImgData2;
+                                    } else {
+                                        recvImgConfig2.path = ph2.dataUrl;
+                                    }
+                                    photoSlide.addImage(recvImgConfig2);
 
                                     // 우측 영수증 메타 정보 기입 카드
                                     photoSlide.addShape(pptx.shapes.ROUNDED_RECTANGLE, {
