@@ -1273,7 +1273,7 @@
                         <p id="export-success-desc" class="text-[11px] text-gray-500 leading-normal px-4"></p>
                     </div>
                     <div class="space-y-2 pt-1">
-                        <button onclick="closeExportModal(); resetAllTripData();"
+                        <button onclick="resetAllTripData();"
                             class="w-full bg-lgRed hover:bg-lgRed-dark text-white text-xs font-bold py-2.5 rounded-xl transition active:scale-95 flex items-center justify-center gap-1.5">
                             <i class="fa-solid fa-rotate-right"></i> 새 출장을 위해 초기화하기
                         </button>
@@ -1985,22 +1985,33 @@
         // 데이터베이스 초기화 함수
         function initDB() {
             return new Promise((resolve, reject) => {
-                const request = indexedDB.open("LG_Trip_DB", 1);
-                request.onupgradeneeded = function (e) {
-                    const database = e.target.result;
-                    if (!database.objectStoreNames.contains("photos")) {
-                        // 기본 키로 id 속성을 지정하여 생성
-                        database.createObjectStore("photos", { keyPath: "id" });
+                try {
+                    if (!window.indexedDB) {
+                        reject(new Error("이 브라우저 환경에서는 IndexedDB를 사용할 수 없습니다."));
+                        return;
                     }
-                };
-                request.onsuccess = function (e) {
-                    db = e.target.result;
-                    resolve(db);
-                };
-                request.onerror = function (e) {
-                    console.error("IndexedDB Open Error:", e.target.error);
-                    reject(e.target.error);
-                };
+                    const request = indexedDB.open("LG_Trip_DB", 1);
+                    request.onupgradeneeded = function (e) {
+                        const database = e.target.result;
+                        if (!database.objectStoreNames.contains("photos")) {
+                            // 기본 키로 id 속성을 지정하여 생성
+                            database.createObjectStore("photos", { keyPath: "id" });
+                        }
+                    };
+                    request.onsuccess = function (e) {
+                        db = e.target.result;
+                        resolve(db);
+                    };
+                    request.onerror = function (e) {
+                        console.error("IndexedDB Open Error:", e.target.error);
+                        reject(e.target.error);
+                    };
+                } catch (err) {
+                    // 일부 샌드박스/미리보기 환경에서는 indexedDB.open() 호출 자체가
+                    // 동기적으로 예외(SecurityError 등)를 던질 수 있으므로 안전하게 처리한다.
+                    console.error("IndexedDB 초기화 중 예외 발생 (동기 오류):", err);
+                    reject(err);
+                }
             });
         }
 
@@ -5039,63 +5050,130 @@ JSON 규격:
         // ── 앱 전체 데이터 초기화 로직 (LocalStorage & IndexedDB 사진 포맷) ──
         // ── 앱 전체 데이터 초기화 커스텀 모달 열기 ──
         function resetAllTripData() {
-            const modal = document.getElementById("reset-confirm-modal");
-            const content = document.getElementById("reset-confirm-modal-content");
-            if (!modal || !content) return;
+            try {
+                const modal = document.getElementById("reset-confirm-modal");
+                const content = document.getElementById("reset-confirm-modal-content");
+                if (!modal || !content) {
+                    console.error("[Reset] 초기화 확인 모달 엘리먼트를 찾을 수 없습니다.");
+                    alert("초기화 화면을 여는 중 문제가 발생했습니다. 페이지를 새로고침한 뒤 다시 시도해 주세요.");
+                    return;
+                }
 
-            modal.classList.remove("hidden");
-            // 브라우저 렌더링 동기화를 위해 강제 리플로우 유도
-            void modal.offsetWidth;
-            modal.classList.remove("opacity-0");
-            content.classList.remove("translate-y-10");
+                modal.classList.remove("hidden");
+                // 브라우저 렌더링 동기화를 위해 강제 리플로우 유도
+                void modal.offsetWidth;
+                modal.classList.remove("opacity-0");
+                content.classList.remove("translate-y-10");
+            } catch (err) {
+                console.error("[Reset] 초기화 모달 오픈 중 오류:", err);
+                alert("초기화 화면을 여는 중 오류가 발생했습니다: " + (err && err.message ? err.message : err));
+            }
         }
 
         // ── 전체 데이터 초기화 커스텀 모달 닫기 ──
         function closeResetConfirmModal() {
-            const modal = document.getElementById("reset-confirm-modal");
-            const content = document.getElementById("reset-confirm-modal-content");
-            if (!modal || !content) return;
+            try {
+                const modal = document.getElementById("reset-confirm-modal");
+                const content = document.getElementById("reset-confirm-modal-content");
+                if (!modal || !content) return;
 
-            modal.classList.add("opacity-0");
-            content.classList.add("translate-y-10");
-            // 페이드아웃 트랜지션 완료(300ms) 후 hidden 처리합니다.
-            setTimeout(() => {
-                modal.classList.add("hidden");
-            }, 300);
+                modal.classList.add("opacity-0");
+                content.classList.add("translate-y-10");
+                // 페이드아웃 트랜지션 완료(300ms) 후 hidden 처리합니다.
+                setTimeout(() => {
+                    modal.classList.add("hidden");
+                }, 300);
+            } catch (err) {
+                console.warn("[Reset] 초기화 모달 닫기 중 오류(무시 가능):", err);
+            }
+        }
+
+        // ── 새로고침이 차단된 환경(샌드박스/미리보기 iframe 등)을 대비한 안전한 새로고침 ──
+        // window.location.reload()가 SecurityError 등으로 실패하더라도 앱이 멈추지 않고
+        // 화면을 직접 초기 상태로 다시 그려서 계속 사용할 수 있도록 한다.
+        async function safeReloadAfterReset() {
+            try {
+                window.location.reload();
+            } catch (reloadErr) {
+                console.warn("[Reset] window.location.reload() 실패, 화면을 직접 초기화합니다:", reloadErr);
+                await rerenderAppInPlace();
+            }
+        }
+
+        // ── 새로고침 없이 화면을 초기 상태로 직접 재구성하는 대체 로직 ──
+        async function rerenderAppInPlace() {
+            try {
+                if (typeof initData === 'function') initData();
+                if (typeof renderTripInfo === 'function') renderTripInfo();
+                if (typeof renderSchedule === 'function') await renderSchedule();
+                if (typeof renderMeetings === 'function') renderMeetings();
+                if (typeof renderPhotos === 'function') await renderPhotos();
+                if (typeof renderChecklist === 'function') renderChecklist();
+                if (typeof updateApiKeyStatus === 'function') updateApiKeyStatus();
+
+                minutesLastResult = null;
+                const minUpload = document.getElementById('minutes-step-upload');
+                const minLoading = document.getElementById('minutes-step-loading');
+                const minResult = document.getElementById('minutes-step-result');
+                if (minUpload) minUpload.classList.remove('hidden');
+                if (minLoading) minLoading.classList.add('hidden');
+                if (minResult) minResult.classList.add('hidden');
+
+                alert("✅ 초기화되었습니다. 새 출장 정보를 입력해 앱을 다시 사용할 수 있습니다.");
+            } catch (err) {
+                console.error("[Reset] 화면 직접 재구성 중 오류:", err);
+                alert("초기화는 완료되었지만 화면 갱신 중 문제가 발생했습니다. 브라우저에서 새로고침(F5)해 주세요.");
+            }
         }
 
         // ── 데이터베이스 및 로컬스토리지 전면 초기화 실제 실행 함수 ──
         async function executeAllDataReset() {
             try {
                 // 1. 로컬스토리지(LocalStorage) 내의 출장 매니저 데이터 영구 삭제
-                localStorage.removeItem("LG_TRIP_INFO");
-                localStorage.removeItem("LG_TRIP_SCHEDULE");
-                localStorage.removeItem("LG_TRIP_MEETINGS");
-                localStorage.removeItem("LG_TRIP_PHOTOS");
-                localStorage.removeItem("LG_TRIP_CHECKLIST");
-                localStorage.removeItem("CLOCK_DEST_TZ");
-                localStorage.removeItem("GEMINI_API_KEY");
+                //    (일부 브라우저/샌드박스 환경은 스토리지 접근을 제한할 수 있어 항목별로 개별 안전 처리한다)
+                const keysToClear = [
+                    "LG_TRIP_INFO", "LG_TRIP_SCHEDULE", "LG_TRIP_MEETINGS",
+                    "LG_TRIP_PHOTOS", "LG_TRIP_CHECKLIST", "CLOCK_DEST_TZ", "GEMINI_API_KEY"
+                ];
+                keysToClear.forEach(key => {
+                    try {
+                        localStorage.removeItem(key);
+                    } catch (storageErr) {
+                        console.warn(`[Reset] localStorage.removeItem("${key}") 실패:`, storageErr);
+                    }
+                });
 
                 // 2. 대용량 첨부 이미지용 인덱스드디비(IndexedDB) 사진 스토어 비우기
-                if (db) {
-                    const transaction = db.transaction(["photos"], "readwrite");
-                    const store = transaction.objectStore("photos");
-                    const clearRequest = store.clear();
+                try {
+                    if (db) {
+                        const transaction = db.transaction(["photos"], "readwrite");
+                        const store = transaction.objectStore("photos");
+                        const clearRequest = store.clear();
 
-                    await new Promise((resolve, reject) => {
-                        clearRequest.onsuccess = () => resolve();
-                        clearRequest.onerror = (e) => reject(e);
-                    });
+                        await new Promise((resolve, reject) => {
+                            clearRequest.onsuccess = () => resolve();
+                            clearRequest.onerror = (e) => reject(e.target ? e.target.error : e);
+                        });
+                    }
+                } catch (dbErr) {
+                    // IndexedDB 초기화가 되어있지 않거나 접근이 차단된 환경에서도
+                    // 전체 초기화 흐름은 계속 진행되어야 하므로 경고만 남기고 진행한다.
+                    console.warn("[Reset] IndexedDB 사진 데이터 삭제 중 오류(무시하고 계속 진행):", dbErr);
                 }
 
                 // 모달을 닫아주고 성공 알림 표시
                 closeResetConfirmModal();
                 alert("✅ 앱의 모든 데이터(출장 정보, 세부 일정, 체크리스트, 사진 데이터)가 성공적으로 초기화되었습니다.\n새로운 상태로 앱을 다시 구동합니다.");
-                window.location.reload(); // 새로고침을 수행하여 기본값(initData)으로 리셋팅 유도
+                await safeReloadAfterReset();
             } catch (err) {
                 console.error("데이터 초기화 과정 중 에러 발생:", err);
-                alert("초기화 과정 중 오류가 발생했습니다: " + err.message);
-                window.location.reload();
+                alert("초기화 과정 중 오류가 발생했습니다: " + (err && err.message ? err.message : err));
+                try {
+                    closeResetConfirmModal();
+                } catch (closeErr) {
+                    console.warn("[Reset] 오류 처리 중 모달 닫기 실패:", closeErr);
+                }
+                await safeReloadAfterReset();
             }
         }
 
