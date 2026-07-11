@@ -649,11 +649,11 @@
                             텍스트 기반 분석</span>
                     </div>
 
-                    <!-- Gemini API Key 설정 (선택사항 · 접기/펼치기) — Claude AI 호출이 실패할 경우의 대체 경로로 사용됩니다 -->
-                    <div class="bg-blue-50 border border-blue-200 rounded-xl p-3 hidden">
+                    <!-- Gemini API Key 설정 (선택사항 · 접기/펼치기) — 3분 초과 음성 처리 및 대체 엔진용 -->
+                    <div class="bg-blue-50 border border-blue-200 rounded-xl p-3">
                         <div class="flex items-center gap-2">
                             <i class="fa-solid fa-key text-blue-600 text-xs"></i>
-                            <span class="text-[10px] font-bold text-blue-800">Gemini API Key (선택, 대체 엔진용)</span>
+                            <span class="text-[10px] font-bold text-blue-800">Gemini API Key (선택, 긴 음성 처리용)</span>
                             <div id="api-key-status" class="text-[9px] flex-1"></div>
                             <button onclick="toggleApiKeySection()" id="api-key-toggle-btn"
                                 class="text-[10px] text-blue-600 underline font-semibold">입력하기</button>
@@ -703,6 +703,9 @@
                                     .aac · .flac · .opus</p>
                                 <p class="text-[9px] text-green-600 font-semibold mt-1">★ 음성 파일은 실제 발화 내용을 텍스트로
                                     변환한 뒤, 전문 회의 기록 관리자 페르소나로 3단 구성 고품질 요약을 진행합니다</p>
+                                <p class="text-[9px] text-amber-600 font-semibold mt-0.5">※ API Key 없이 처리 시 모바일
+                                    브라우저 안정성을 위해 3분 이하 음성만 지원합니다. 더 긴 음성은 Gemini API
+                                    Key(무료) 등록 시 이용 가능합니다.</p>
                             </div>
                             <!-- 선택된 파일 정보 (기본 숨김) -->
                             <div id="min-file-info" class="hidden items-center gap-3 text-left">
@@ -6563,6 +6566,37 @@ LG전자 B2B 해외 출장 일정에 따른 호텔 예약을 요청 드립니다
                 const apiKey = localStorage.getItem('GEMINI_API_KEY');
                 let transcript = '';
 
+                // 모바일 브라우저(Safari/Chrome)에서 실제 확인된 문제: API Key 없이 브라우저 자체에서
+                // 긴 음성을 처리하면 오디오 디코딩 + WASM 음성인식 모델 로딩이 겹치면서 메모리 부족으로
+                // 앱(탭)이 강제 종료("재부팅")될 수 있다. 따라서 API Key가 없을 때는 브라우저 자체 처리를
+                // 짧은 음성(3분 이하)으로만 제한하고, 그보다 길면 Gemini API Key 등록을 안내한다.
+                const BROWSER_WHISPER_MAX_SEC = 180;
+
+                if (!apiKey && durationSec > BROWSER_WHISPER_MAX_SEC) {
+                    if (progressContainer) progressContainer.classList.add('hidden');
+                    document.getElementById('dropzone-default').classList.remove('hidden');
+                    const fileInputEl = document.getElementById('audio-file-input');
+                    if (fileInputEl) fileInputEl.value = '';
+
+                    const openKeySettings = window.confirm(
+                        `⚠️ 이 음성 파일은 ${durationStr} 분량입니다.\n\n` +
+                        `3분을 초과하는 음성은 모바일 브라우저(Safari/Chrome)에서 메모리 부족으로 앱이 ` +
+                        `강제 종료(재부팅)될 수 있어, API Key 없는 브라우저 자체 처리는 지원하지 않습니다.\n\n` +
+                        `Gemini API Key를 등록하시면 서버에서 안전하게 처리되어 이런 문제가 없습니다. (무료 발급 가능)\n\n` +
+                        `[확인] → API Key 등록 화면 열기\n` +
+                        `[취소] → 업로드 취소`
+                    );
+                    if (openKeySettings) {
+                        const section = document.getElementById('api-key-section');
+                        if (section && section.classList.contains('hidden')) {
+                            toggleApiKeySection();
+                        }
+                        const keyInput = document.getElementById('gemini-api-key-input');
+                        if (keyInput) keyInput.focus();
+                    }
+                    return;
+                }
+
                 if (apiKey) {
                     // ── Gemini 네이티브 음성 이해 (API Key 있을 때, 가장 정확하고 브라우저 메모리 부담 없음) ──
                     if (statusText) statusText.textContent = 'Gemini AI가 음성을 실제로 분석 중...';
@@ -6571,26 +6605,7 @@ LG전자 B2B 해외 출장 일정에 따른 호텔 예약을 요청 드립니다
                     const tripInfo = JSON.parse(localStorage.getItem('LG_TRIP_INFO')) || DEFAULT_TRIP_INFO;
                     transcript = await analyzeAudioWithGemini(file, apiKey, tripInfo);
                 } else {
-                    // API Key가 없는 상태에서 긴 음성을 브라우저 자체 처리하면 기기(특히 모바일)의
-                    // 메모리 제약으로 앱이 강제 종료될 위험이 있으므로, 미리 안내하고 선택하게 한다.
-                    if (durationSec > 600) {
-                        const proceed = window.confirm(
-                            `⚠️ 이 음성 파일은 ${durationStr} 분량으로 상당히 긴 편입니다.\n\n` +
-                            `Gemini API Key 없이 브라우저에서 직접 처리할 경우, 기기(특히 모바일)의 메모리 제약으로 ` +
-                            `처리 중 앱이 종료되거나 오래 걸릴 수 있습니다.\n\n` +
-                            `[확인] → 그래도 브라우저에서 계속 처리 (구간별로 나누어 처리하여 시도)\n` +
-                            `[취소] → 중단하고 Gemini API Key를 등록한 뒤 다시 시도`
-                        );
-                        if (!proceed) {
-                            if (progressContainer) progressContainer.classList.add('hidden');
-                            document.getElementById('dropzone-default').classList.remove('hidden');
-                            const fileInputEl = document.getElementById('audio-file-input');
-                            if (fileInputEl) fileInputEl.value = '';
-                            return;
-                        }
-                    }
-
-                    // ── 브라우저 내장 Whisper로 실제 음성 인식 (API Key 불필요) ──
+                    // ── 브라우저 내장 Whisper로 실제 음성 인식 (API Key 불필요, 3분 이하 음성만 해당) ──
                     if (statusText) statusText.textContent = '🎙️ 브라우저 내장 AI(Whisper)로 실제 음성 인식 준비 중...';
                     if (progressBar) progressBar.style.width = '15%';
                     if (progressPercent) progressPercent.textContent = '15%';
@@ -8251,8 +8266,10 @@ ${actionTable}`;
 
         /**
          * 음성 파일을 브라우저에서 직접 실제 텍스트로 변환합니다 (Gemini API Key 불필요).
-         * 긴 음성은 일정 구간(기본 3분)씩 순차적으로 나누어 처리하여
+         * 긴 음성은 1분 단위로 순차적으로 나누어 처리하여
          * 모바일 등 메모리 제약이 큰 환경에서도 브라우저가 강제 종료되지 않도록 한다.
+         * (실제 호출부(handleMinutesAudioFileUpload)에서는 API Key가 없을 때 3분 이하 음성에만
+         *  이 함수를 사용하도록 상한을 두고 있다.)
          * 반환값: 인식된 실제 발화 텍스트(transcript)
          */
         async function transcribeAudioWithWhisper(file, onProgress) {
@@ -8267,9 +8284,9 @@ ${actionTable}`;
 
             if (typeof onProgress === 'function') onProgress({ status: 'transcribing' });
 
-            // 긴 음성은 3분 단위 구간으로 나누어 순차 처리 → 한 번에 필요한 메모리를 제한하고,
+            // 1분 단위 구간으로 나누어 순차 처리 → 한 번에 필요한 메모리를 최소화하고,
             // 일부 구간에서 실패하더라도 나머지 구간의 인식 결과는 보존한다.
-            const SEGMENT_SEC = 180;
+            const SEGMENT_SEC = 60;
             const sampleRate = 16000;
             const segments = [];
             if (durationSec <= SEGMENT_SEC * 1.2) {
@@ -8312,6 +8329,12 @@ ${actionTable}`;
                 } catch (segErr) {
                     console.warn(`[Whisper] 구간 ${i + 1}/${segments.length} 인식 실패, 해당 구간은 건너뜁니다:`, segErr);
                     transcriptParts.push('');
+                }
+
+                // 구간 처리 사이에 짧은 유예 시간을 두어 브라우저가 사용이 끝난 메모리를
+                // 회수(GC)할 기회를 준다 (모바일 메모리 압박 완화)
+                if (i < segments.length - 1) {
+                    await new Promise(resolve => setTimeout(resolve, 50));
                 }
             }
 
