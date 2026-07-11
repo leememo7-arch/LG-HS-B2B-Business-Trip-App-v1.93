@@ -6564,13 +6564,32 @@ LG전자 B2B 해외 출장 일정에 따른 호텔 예약을 요청 드립니다
                 let transcript = '';
 
                 if (apiKey) {
-                    // ── Gemini 네이티브 음성 이해 (API Key 있을 때, 가장 정확) ──
+                    // ── Gemini 네이티브 음성 이해 (API Key 있을 때, 가장 정확하고 브라우저 메모리 부담 없음) ──
                     if (statusText) statusText.textContent = 'Gemini AI가 음성을 실제로 분석 중...';
                     if (progressBar) progressBar.style.width = '40%';
                     if (progressPercent) progressPercent.textContent = '40%';
                     const tripInfo = JSON.parse(localStorage.getItem('LG_TRIP_INFO')) || DEFAULT_TRIP_INFO;
                     transcript = await analyzeAudioWithGemini(file, apiKey, tripInfo);
                 } else {
+                    // API Key가 없는 상태에서 긴 음성을 브라우저 자체 처리하면 기기(특히 모바일)의
+                    // 메모리 제약으로 앱이 강제 종료될 위험이 있으므로, 미리 안내하고 선택하게 한다.
+                    if (durationSec > 600) {
+                        const proceed = window.confirm(
+                            `⚠️ 이 음성 파일은 ${durationStr} 분량으로 상당히 긴 편입니다.\n\n` +
+                            `Gemini API Key 없이 브라우저에서 직접 처리할 경우, 기기(특히 모바일)의 메모리 제약으로 ` +
+                            `처리 중 앱이 종료되거나 오래 걸릴 수 있습니다.\n\n` +
+                            `[확인] → 그래도 브라우저에서 계속 처리 (구간별로 나누어 처리하여 시도)\n` +
+                            `[취소] → 중단하고 Gemini API Key를 등록한 뒤 다시 시도`
+                        );
+                        if (!proceed) {
+                            if (progressContainer) progressContainer.classList.add('hidden');
+                            document.getElementById('dropzone-default').classList.remove('hidden');
+                            const fileInputEl = document.getElementById('audio-file-input');
+                            if (fileInputEl) fileInputEl.value = '';
+                            return;
+                        }
+                    }
+
                     // ── 브라우저 내장 Whisper로 실제 음성 인식 (API Key 불필요) ──
                     if (statusText) statusText.textContent = '🎙️ 브라우저 내장 AI(Whisper)로 실제 음성 인식 준비 중...';
                     if (progressBar) progressBar.style.width = '15%';
@@ -6579,16 +6598,24 @@ LG전자 B2B 해외 출장 일정에 따른 호텔 예약을 요청 드립니다
                     const whisperResult = await transcribeAudioWithWhisper(file, (p) => {
                         if (p && p.status === 'progress' && p.file) {
                             if (statusText) statusText.textContent = `🎙️ 음성 인식 모델 다운로드 중... (최초 1회, ${p.file})`;
-                            const pct = 15 + Math.round((p.progress || 0) * 0.45); // 15~60%
-                            const clamped = Math.min(Math.max(pct, 15), 60);
+                            const pct = 15 + Math.round((p.progress || 0) * 0.35); // 15~50%
+                            const clamped = Math.min(Math.max(pct, 15), 50);
                             if (progressBar) progressBar.style.width = `${clamped}%`;
                             if (progressPercent) progressPercent.textContent = `${clamped}%`;
                         } else if (p && p.status === 'decoding') {
                             if (statusText) statusText.textContent = '🎙️ 오디오 디코딩 중...';
                         } else if (p && p.status === 'transcribing') {
                             if (statusText) statusText.textContent = '🎙️ 실제 발화 내용을 텍스트로 변환 중... (음성 길이에 따라 다소 소요될 수 있습니다)';
-                            if (progressBar) progressBar.style.width = '65%';
-                            if (progressPercent) progressPercent.textContent = '65%';
+                            if (progressBar) progressBar.style.width = '55%';
+                            if (progressPercent) progressPercent.textContent = '55%';
+                        } else if (p && p.status === 'transcribing-segment') {
+                            const segNum = p.segmentIndex + 1;
+                            const segTotal = p.segmentCount;
+                            if (statusText) statusText.textContent = `🎙️ 음성 구간 인식 중... (${segNum}/${segTotal} 구간)`;
+                            const pct = 55 + Math.round(((segNum - 1) / Math.max(segTotal, 1)) * 35); // 55~90%
+                            const clamped = Math.min(Math.max(pct, 55), 90);
+                            if (progressBar) progressBar.style.width = `${clamped}%`;
+                            if (progressPercent) progressPercent.textContent = `${clamped}%`;
                         }
                     });
                     transcript = whisperResult.transcript;
@@ -8128,10 +8155,14 @@ ${actionTable}`;
         //  서버나 API Key 없이도 실제 발화 내용을 텍스트로 변환한다)
         // ─────────────────────────────────────────────────────────────
 
-        let _whisperTranscriberPromise = null;
+        const _whisperTranscriberCache = {};
 
         /**
          * 오디오 파일을 Whisper 입력 규격(16kHz, mono, Float32Array)으로 디코딩합니다.
+         * 메모리 사용량을 최소화하기 위해:
+         *  - 이미 모노인 경우 불필요한 복사를 하지 않고 채널 데이터를 그대로 사용
+         *  - OfflineAudioContext(무거운 렌더링 그래프) 대신 경량 선형보간 리샘플링 사용
+         * (모바일 브라우저에서 긴 음성 처리 시 메모리 부족으로 앱이 종료되는 문제 방지)
          */
         async function decodeAudioFileToFloat32(file, targetSampleRate = 16000) {
             const arrayBuffer = await file.arrayBuffer();
@@ -8140,51 +8171,64 @@ ${actionTable}`;
             const tempCtx = new AudioCtx();
             let audioBuffer;
             try {
-                audioBuffer = await tempCtx.decodeAudioData(arrayBuffer.slice(0));
+                audioBuffer = await tempCtx.decodeAudioData(arrayBuffer);
             } finally {
                 if (tempCtx.close) tempCtx.close();
             }
 
-            // 모노 다운믹스
             const numChannels = audioBuffer.numberOfChannels;
             const length = audioBuffer.length;
-            const monoData = new Float32Array(length);
-            for (let ch = 0; ch < numChannels; ch++) {
-                const channelData = audioBuffer.getChannelData(ch);
-                for (let i = 0; i < length; i++) monoData[i] += channelData[i] / numChannels;
+
+            // 모노 다운믹스 (이미 모노면 복사 없이 그대로 사용 → 메모리 절약)
+            let monoData;
+            if (numChannels === 1) {
+                monoData = audioBuffer.getChannelData(0);
+            } else {
+                monoData = new Float32Array(length);
+                for (let ch = 0; ch < numChannels; ch++) {
+                    const channelData = audioBuffer.getChannelData(ch);
+                    for (let i = 0; i < length; i++) monoData[i] += channelData[i] / numChannels;
+                }
             }
 
-            if (Math.round(audioBuffer.sampleRate) === targetSampleRate) {
+            const sourceSampleRate = audioBuffer.sampleRate;
+            if (Math.round(sourceSampleRate) === targetSampleRate) {
                 return monoData;
             }
 
-            // 목표 샘플레이트로 리샘플링 (OfflineAudioContext 활용)
-            const OfflineCtx = window.OfflineAudioContext || window.webkitOfflineAudioContext;
-            const targetLength = Math.ceil(length * targetSampleRate / audioBuffer.sampleRate);
-            const offlineCtx = new OfflineCtx(1, targetLength, targetSampleRate);
-            const monoBuffer = offlineCtx.createBuffer(1, length, audioBuffer.sampleRate);
-            monoBuffer.copyToChannel(monoData, 0);
-            const bufferSource = offlineCtx.createBufferSource();
-            bufferSource.buffer = monoBuffer;
-            bufferSource.connect(offlineCtx.destination);
-            bufferSource.start(0);
-            const rendered = await offlineCtx.startRendering();
-            return rendered.getChannelData(0);
+            // 경량 선형보간 리샘플링 (OfflineAudioContext보다 메모리 사용량이 훨씬 적음)
+            return resampleLinear(monoData, sourceSampleRate, targetSampleRate);
+        }
+
+        // 선형보간 기반 경량 리샘플러
+        function resampleLinear(inputData, inputSampleRate, targetSampleRate) {
+            if (Math.round(inputSampleRate) === Math.round(targetSampleRate)) return inputData;
+            const ratio = inputSampleRate / targetSampleRate;
+            const newLength = Math.max(1, Math.round(inputData.length / ratio));
+            const output = new Float32Array(newLength);
+            for (let i = 0; i < newLength; i++) {
+                const srcPos = i * ratio;
+                const idx0 = Math.floor(srcPos);
+                const idx1 = Math.min(idx0 + 1, inputData.length - 1);
+                const frac = srcPos - idx0;
+                output[i] = inputData[idx0] + (inputData[idx1] - inputData[idx0]) * frac;
+            }
+            return output;
         }
 
         /**
-         * Transformers.js Whisper 파이프라인을 (최초 1회) 로드합니다.
+         * Transformers.js Whisper 파이프라인을 (모델별로 최초 1회) 로드합니다.
          * CDN에서 모델을 내려받아 브라우저 내에서 WASM/WebGPU로 직접 추론하므로
          * API Key나 서버 없이도 실제 음성 인식이 가능하다.
          */
-        async function getWhisperTranscriber(onProgress) {
-            if (_whisperTranscriberPromise) return _whisperTranscriberPromise;
+        async function getWhisperTranscriber(onProgress, modelId = 'onnx-community/whisper-base') {
+            if (_whisperTranscriberCache[modelId]) return _whisperTranscriberCache[modelId];
 
-            _whisperTranscriberPromise = (async () => {
+            const loadPromise = (async () => {
                 const { pipeline } = await import('https://cdn.jsdelivr.net/npm/@huggingface/transformers@4.2.0');
                 const transcriber = await pipeline(
                     'automatic-speech-recognition',
-                    'onnx-community/whisper-base',
+                    modelId,
                     {
                         dtype: 'q8',
                         progress_callback: (data) => {
@@ -8195,53 +8239,87 @@ ${actionTable}`;
                 return transcriber;
             })();
 
+            _whisperTranscriberCache[modelId] = loadPromise;
+
             try {
-                return await _whisperTranscriberPromise;
+                return await loadPromise;
             } catch (err) {
-                _whisperTranscriberPromise = null; // 실패 시 다음 시도에서 재로딩할 수 있도록 초기화
+                delete _whisperTranscriberCache[modelId]; // 실패 시 다음 시도에서 재로딩할 수 있도록 초기화
                 throw err;
             }
         }
 
         /**
          * 음성 파일을 브라우저에서 직접 실제 텍스트로 변환합니다 (Gemini API Key 불필요).
+         * 긴 음성은 일정 구간(기본 3분)씩 순차적으로 나누어 처리하여
+         * 모바일 등 메모리 제약이 큰 환경에서도 브라우저가 강제 종료되지 않도록 한다.
          * 반환값: 인식된 실제 발화 텍스트(transcript)
          */
         async function transcribeAudioWithWhisper(file, onProgress) {
             if (typeof onProgress === 'function') onProgress({ status: 'decoding' });
             const audioData = await decodeAudioFileToFloat32(file, 16000);
+            const durationSec = audioData.length / 16000;
 
-            const transcriber = await getWhisperTranscriber(onProgress);
+            // 매우 긴 음성은 더 작고 가벼운 모델을 사용해 메모리/처리 부담을 낮춤
+            const modelId = durationSec > 600 ? 'onnx-community/whisper-tiny' : 'onnx-community/whisper-base';
+
+            const transcriber = await getWhisperTranscriber(onProgress, modelId);
 
             if (typeof onProgress === 'function') onProgress({ status: 'transcribing' });
 
-            const durationSec = audioData.length / 16000;
-            // 30초 단위로 청크 처리 + 5초 오버랩 → 긴 회의 음성도 안정적으로 처리
-            // ★ 중요: chunk_length_s로 긴 오디오를 나눠 처리할 때는 return_timestamps를
-            // 반드시 활성화해야 한다. Whisper의 청크 스티칭(이어붙이기) 알고리즘은 내부적으로
-            // 타임스탬프 토큰을 이용해 각 청크의 겹치는 구간을 정렬하는데, return_timestamps를
-            // false로 두면 이 스티칭이 제대로 동작하지 않아 첫 청크(약 30초)만 반환되거나
-            // 오류가 발생할 수 있다. (transformers.js/HF 공식 이슈에서도 동일하게 보고된 문제)
-            const result = await transcriber(audioData, {
-                chunk_length_s: 30,
-                stride_length_s: 5,
-                return_timestamps: true
-            });
-
-            let transcript = '';
-            if (result) {
-                if (typeof result.text === 'string' && result.text.trim()) {
-                    transcript = result.text;
-                } else if (Array.isArray(result.chunks) && result.chunks.length > 0) {
-                    transcript = result.chunks.map(c => c.text).join('');
-                } else if (Array.isArray(result)) {
-                    transcript = result.map(r => r.text || '').join(' ');
+            // 긴 음성은 3분 단위 구간으로 나누어 순차 처리 → 한 번에 필요한 메모리를 제한하고,
+            // 일부 구간에서 실패하더라도 나머지 구간의 인식 결과는 보존한다.
+            const SEGMENT_SEC = 180;
+            const sampleRate = 16000;
+            const segments = [];
+            if (durationSec <= SEGMENT_SEC * 1.2) {
+                segments.push(audioData);
+            } else {
+                for (let startSec = 0; startSec < durationSec; startSec += SEGMENT_SEC) {
+                    const startIdx = Math.floor(startSec * sampleRate);
+                    const endIdx = Math.min(audioData.length, Math.floor((startSec + SEGMENT_SEC) * sampleRate));
+                    if (endIdx > startIdx) segments.push(audioData.subarray(startIdx, endIdx));
                 }
             }
-            if (!transcript.trim()) {
+
+            const transcriptParts = [];
+            for (let i = 0; i < segments.length; i++) {
+                if (typeof onProgress === 'function') {
+                    onProgress({ status: 'transcribing-segment', segmentIndex: i, segmentCount: segments.length });
+                }
+                try {
+                    // ★ chunk_length_s로 긴 오디오를 나눠 처리할 때는 return_timestamps를
+                    // 반드시 활성화해야 한다. Whisper의 청크 스티칭(이어붙이기) 알고리즘은 내부적으로
+                    // 타임스탬프 토큰을 이용해 겹치는 구간을 정렬하는데, 꺼두면 스티칭이 제대로 되지
+                    // 않아 일부 구간만 반환되거나 오류가 발생할 수 있다.
+                    const result = await transcriber(segments[i], {
+                        chunk_length_s: 30,
+                        stride_length_s: 5,
+                        return_timestamps: true
+                    });
+
+                    let segText = '';
+                    if (result) {
+                        if (typeof result.text === 'string' && result.text.trim()) {
+                            segText = result.text;
+                        } else if (Array.isArray(result.chunks) && result.chunks.length > 0) {
+                            segText = result.chunks.map(c => c.text).join('');
+                        } else if (Array.isArray(result)) {
+                            segText = result.map(r => r.text || '').join(' ');
+                        }
+                    }
+                    transcriptParts.push(segText);
+                } catch (segErr) {
+                    console.warn(`[Whisper] 구간 ${i + 1}/${segments.length} 인식 실패, 해당 구간은 건너뜁니다:`, segErr);
+                    transcriptParts.push('');
+                }
+            }
+
+            const transcript = transcriptParts.join(' ').replace(/\s+/g, ' ').trim();
+            if (!transcript) {
                 throw new Error('음성 인식 결과가 비어 있습니다. 음성이 명확하지 않거나 무음 구간일 수 있습니다.');
             }
-            return { transcript: transcript.trim(), durationSec };
+            return { transcript, durationSec };
         }
 
         // ─────────────────────────────────────────────────────────────
