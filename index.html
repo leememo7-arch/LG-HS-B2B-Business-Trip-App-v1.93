@@ -3393,7 +3393,7 @@
 ]`;
 
                     const response = await fetch(
-                        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
+                        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
                         {
                             method: "POST",
                             headers: { "Content-Type": "application/json" },
@@ -4419,7 +4419,7 @@ JSON 규격:
 }`;
 
                     const response = await fetch(
-                        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
+                        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
                         {
                             method: "POST",
                             headers: { "Content-Type": "application/json" },
@@ -4893,7 +4893,7 @@ JSON 규격:
 }`;
 
                         const response = await fetch(
-                            `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
+                            `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
                             {
                                 method: "POST",
                                 headers: { "Content-Type": "application/json" },
@@ -6930,7 +6930,7 @@ LG전자 B2B 해외 출장 일정에 따른 호텔 예약을 요청 드립니다
 
                         const firstStagePrompt = `당신은 전문적인 회의 기록 관리자입니다. 제공된 회의 대화 내용을 분석하여 회의의 세부 맥락, 대화 흐름, 제품별 논의 사항 및 결정사항을 빠짐없이 상세하게 요약해 주세요. 이 요약은 2차 요약의 기초 자료로 활용되므로 정보가 누락되지 않아야 합니다.\n\n[회의 대화 내용]\n${translatedText}`;
                         const geminiRes1 = await fetch(
-                            `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
+                            `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
                             {
                                 method: 'POST',
                                 headers: { 'Content-Type': 'application/json' },
@@ -7152,13 +7152,13 @@ LG전자 B2B 해외 출장 일정에 따른 호텔 예약을 요청 드립니다
         async function structureMinutesWithGemini(rawText, subject, speakers, style, custom, apiKey) {
             const prompt = buildStructuredMinutesPrompt(subject);
 
-            // 회의 대화 내용의 분량에 맞추어 모델을 동적으로 결정 (긴 회의록일 시 대용량 컨텍스트 대응 Gemini 3.0 Pro/1.5 Pro 우선 가동)
+            // 회의 대화 내용의 분량에 맞추어 모델을 동적으로 결정 (긴 회의록일 시 대용량 컨텍스트 대응 Gemini 2.5 Pro 우선 가동)
             const modelCandidates = [];
             if (rawText.length > 5000) {
                 console.log(`[Gemini 요약] 회의록 텍스트 분량이 길어 (${rawText.length}자) 대용량 컨텍스트 모델을 우선 적용합니다.`);
-                modelCandidates.push('gemini-3.0-pro', 'gemini-1.5-pro', 'gemini-2.0-flash');
+                modelCandidates.push('gemini-2.5-pro', 'gemini-2.5-flash');
             } else {
-                modelCandidates.push('gemini-2.0-flash', 'gemini-1.5-pro');
+                modelCandidates.push('gemini-2.5-flash', 'gemini-2.5-pro');
             }
 
             let response = null;
@@ -8022,7 +8022,7 @@ ${actionTable}`;
             }
 
             // ── Gemini API generateContent 호출 ──
-            // [전략] gemini-2.0-flash로 먼저 시도, 실패 시 gemini-1.5-pro로 자동 폴백
+            // [전략] gemini-2.5-flash로 먼저 시도, 실패 시 gemini-2.5-pro로 자동 폴백
             const requestBody = {
                 contents: [{
                     parts: [
@@ -8037,10 +8037,10 @@ ${actionTable}`;
             };
 
             // 모델 후보 목록 (순서대로 시도)
-            // gemini-2.0-flash → 실패 시 gemini-1.5-pro 순으로 자동 전환
+            // gemini-2.5-flash → 실패 시 gemini-2.5-pro 순으로 자동 전환
             const modelCandidates = [
-                'gemini-2.0-flash',
-                'gemini-1.5-pro'
+                'gemini-2.5-flash',
+                'gemini-2.5-pro'
             ];
 
             let response = null;
@@ -8166,7 +8166,7 @@ ${actionTable}`;
             }
 
             // ── 본문 = 전체 AI 응답 + 미팅 메타정보 ──
-            content = `[📢 음성 파일 분석 정보]\n• 파일명: ${fileName}\n• 용량: ${fileSize}\n• 음성 길이: ${durationStr}\n• 분석 엔진: Gemini 2.0 Flash (AI 실제 음성 분석)\n\n` + responseText;
+            content = `[📢 음성 파일 분석 정보]\n• 파일명: ${fileName}\n• 용량: ${fileSize}\n• 음성 길이: ${durationStr}\n• 분석 엔진: Gemini 2.5 Flash (AI 실제 음성 분석)\n\n` + responseText;
 
             return { title, content, action };
         }
@@ -8743,7 +8743,7 @@ ${scheduleContext}
                         } else {
                             verificationText += `\n• 현장 사진 메모와 음성 내용 간의 직접적인 텍스트 매칭이 확인되지 않았습니다.`;
                         }
-                        verificationText += `\n\n📌 [정보 출처]\n• 음성 분석: ${fileName} (${fileSize}, ${durationStr}) — Gemini 2.0 Flash`;
+                        verificationText += `\n\n📌 [정보 출처]\n• 음성 분석: ${fileName} (${fileSize}, ${durationStr}) — Gemini 2.5 Flash`;
 
                         const raw = parseGeminiResponse(geminiResponse, fileName, fileSize, durationStr);
                         parsedData = {
@@ -10080,7 +10080,7 @@ ${context.scheduleTopic ? `- 미팅 안건: ${context.scheduleTopic}` : ''}
             };
 
             const response = await fetch(
-                `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
+                `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
                 { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(requestBody) }
             );
 
@@ -10234,7 +10234,7 @@ ${context.scheduleTopic ? `- 미팅 안건: ${context.scheduleTopic}` : ''}
 
             try {
                 const response = await fetch(
-                    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
+                    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
                     {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
