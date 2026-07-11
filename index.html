@@ -8217,13 +8217,27 @@ ${actionTable}`;
 
             const durationSec = audioData.length / 16000;
             // 30초 단위로 청크 처리 + 5초 오버랩 → 긴 회의 음성도 안정적으로 처리
+            // ★ 중요: chunk_length_s로 긴 오디오를 나눠 처리할 때는 return_timestamps를
+            // 반드시 활성화해야 한다. Whisper의 청크 스티칭(이어붙이기) 알고리즘은 내부적으로
+            // 타임스탬프 토큰을 이용해 각 청크의 겹치는 구간을 정렬하는데, return_timestamps를
+            // false로 두면 이 스티칭이 제대로 동작하지 않아 첫 청크(약 30초)만 반환되거나
+            // 오류가 발생할 수 있다. (transformers.js/HF 공식 이슈에서도 동일하게 보고된 문제)
             const result = await transcriber(audioData, {
                 chunk_length_s: 30,
                 stride_length_s: 5,
-                return_timestamps: false
+                return_timestamps: true
             });
 
-            const transcript = (result && (result.text || (Array.isArray(result) ? result.map(r => r.text).join(' ') : ''))) || '';
+            let transcript = '';
+            if (result) {
+                if (typeof result.text === 'string' && result.text.trim()) {
+                    transcript = result.text;
+                } else if (Array.isArray(result.chunks) && result.chunks.length > 0) {
+                    transcript = result.chunks.map(c => c.text).join('');
+                } else if (Array.isArray(result)) {
+                    transcript = result.map(r => r.text || '').join(' ');
+                }
+            }
             if (!transcript.trim()) {
                 throw new Error('음성 인식 결과가 비어 있습니다. 음성이 명확하지 않거나 무음 구간일 수 있습니다.');
             }
