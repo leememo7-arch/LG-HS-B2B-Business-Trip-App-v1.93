@@ -7824,6 +7824,16 @@ ${actionTable}`;
         // [ Gemini API 호출 — 음성 파일을 Base64로 인코딩하여 전송 ]
         // ─────────────────────────────────────────────────────────────
 
+        // M4A 파일 여부를 확장자와 다양한 MIME 타입 표기(브라우저/OS별 차이) 모두 고려해 판별하는 공용 헬퍼
+        // (모바일마다 audio/mp4, audio/x-m4a, audio/m4a 등으로 다르게 보고하므로 확장자 검사를 우선한다)
+        function isM4AFile(file) {
+            const fileExt = (file.name.split('.').pop() || '').toLowerCase();
+            return fileExt === 'm4a' ||
+                file.type === 'audio/x-m4a' ||
+                file.type === 'audio/m4a' ||
+                (fileExt === 'm4a' && file.type === 'audio/mp4');
+        }
+
         /**
          * 음성 파일을 Gemini API에 전송하여 타임스탬프 기반 회의록을 생성합니다.
          * 파일은 Base64로 인코딩되어 inlineData 방식으로 전달됩니다.
@@ -7846,10 +7856,7 @@ ${actionTable}`;
 
             // M4A 파일 감지: 확장자 또는 다양한 MIME 타입으로 판별
             // (모바일마다 audio/mp4, audio/x-m4a, audio/m4a 등으로 다르게 보고)
-            const isM4A = fileExt === 'm4a' ||
-                file.type === 'audio/x-m4a' ||
-                file.type === 'audio/m4a' ||
-                (fileExt === 'm4a' && file.type === 'audio/mp4');
+            const isM4A = isM4AFile(file);
 
             // 최종 MIME 타입 결정
             let mimeType;
@@ -8174,12 +8181,32 @@ ${actionTable}`;
 
         /**
          * 오디오 파일을 Whisper 입력 규격(16kHz, mono, Float32Array)으로 디코딩합니다.
-         * 메모리 사용량을 최소화하기 위해:
-         *  - 이미 모노인 경우 불필요한 복사를 하지 않고 채널 데이터를 그대로 사용
-         *  - OfflineAudioContext(무거운 렌더링 그래프) 대신 경량 선형보간 리샘플링 사용
-         * (모바일 브라우저에서 긴 음성 처리 시 메모리 부족으로 앱이 종료되는 문제 방지)
+         * 1차: AudioContext.decodeAudioData (빠르고 메모리 효율적, M4A/AAC 포함 대부분의 포맷 지원)
+         * 2차(폴백): 위 방식이 실패할 경우, <audio> 재생을 통한 실시간 캡처 방식으로 재시도
+         *   (일부 M4A 인코딩 프로파일은 decodeAudioData에서 거부되지만 실제 재생은 가능한 경우가 있음)
          */
         async function decodeAudioFileToFloat32(file, targetSampleRate = 16000) {
+            try {
+                return await decodeAudioFileViaDecodeAudioData(file, targetSampleRate);
+            } catch (primaryErr) {
+                console.warn('[AudioDecode] decodeAudioData 디코딩 실패, 재생 캡처 방식으로 재시도합니다:', primaryErr);
+                try {
+                    return await decodeAudioFileViaPlayback(file, targetSampleRate);
+                } catch (fallbackErr) {
+                    console.error('[AudioDecode] 재생 캡처 방식도 실패:', fallbackErr);
+                    const ext = (file.name.split('.').pop() || '').toLowerCase();
+                    throw new Error(
+                        `이 ${ext.toUpperCase()} 파일의 오디오 코덱을 이 브라우저에서 디코딩할 수 없습니다. ` +
+                        `(원인: ${primaryErr.message || primaryErr})\n` +
+                        `Gemini API Key를 등록하시면 서버에서 안전하게 처리할 수 있습니다.`
+                    );
+                }
+            }
+        }
+
+        // 메모리 최소화: 이미 모노면 복사 없이 그대로 사용, OfflineAudioContext 대신 경량 선형보간 리샘플링 사용
+        // (모바일 브라우저에서 긴 음성 처리 시 메모리 부족으로 앱이 종료되는 문제 방지)
+        async function decodeAudioFileViaDecodeAudioData(file, targetSampleRate = 16000) {
             const arrayBuffer = await file.arrayBuffer();
             const AudioCtx = window.AudioContext || window.webkitAudioContext;
             if (!AudioCtx) throw new Error("이 브라우저는 Web Audio API를 지원하지 않습니다.");
@@ -8213,6 +8240,99 @@ ${actionTable}`;
 
             // 경량 선형보간 리샘플링 (OfflineAudioContext보다 메모리 사용량이 훨씬 적음)
             return resampleLinear(monoData, sourceSampleRate, targetSampleRate);
+        }
+
+        /**
+         * decodeAudioData가 거부하는 일부 M4A/AAC 인코딩 프로파일을 위한 폴백 디코더.
+         * <audio> 엘리먼트로 무음 재생하면서 ScriptProcessorNode로 실시간 PCM을 캡처한다.
+         * (브라우저의 재생 파이프라인은 decodeAudioData보다 더 관용적으로 코덱을 지원하는 경우가 많음)
+         * 주의: 재생 속도로만 캡처할 수 있어 파일 길이만큼 시간이 걸리며,
+         *       일부 모바일 브라우저의 자동재생 정책으로 실패할 수 있는 최후의 수단이다.
+         */
+        async function decodeAudioFileViaPlayback(file, targetSampleRate = 16000) {
+            return new Promise((resolve, reject) => {
+                const AudioCtx = window.AudioContext || window.webkitAudioContext;
+                if (!AudioCtx) { reject(new Error('Web Audio API를 지원하지 않습니다.')); return; }
+
+                const objectUrl = URL.createObjectURL(file);
+                const audioEl = document.createElement('audio');
+                audioEl.src = objectUrl;
+                audioEl.preload = 'auto';
+                audioEl.muted = true; // 실제 소리는 재생하지 않음
+                audioEl.playsInline = true;
+
+                const audioCtx = new AudioCtx();
+                const chunks = [];
+                let settled = false;
+                let source, processor, silentGain;
+
+                const cleanup = () => {
+                    try { if (processor) processor.disconnect(); } catch (e) { /* noop */ }
+                    try { if (source) source.disconnect(); } catch (e) { /* noop */ }
+                    try { if (silentGain) silentGain.disconnect(); } catch (e) { /* noop */ }
+                    try { audioCtx.close(); } catch (e) { /* noop */ }
+                    URL.revokeObjectURL(objectUrl);
+                };
+
+                const finish = (fn) => {
+                    if (settled) return;
+                    settled = true;
+                    cleanup();
+                    fn();
+                };
+
+                audioEl.addEventListener('error', () => {
+                    finish(() => reject(new Error('오디오 엘리먼트에서 파일을 재생할 수 없습니다.')));
+                });
+
+                audioEl.addEventListener('canplay', () => {
+                    try {
+                        source = audioCtx.createMediaElementSource(audioEl);
+                        processor = audioCtx.createScriptProcessor(4096, 1, 1);
+                        silentGain = audioCtx.createGain();
+                        silentGain.gain.value = 0; // 캡처만 하고 실제로는 무음 처리
+
+                        source.connect(processor);
+                        processor.connect(silentGain);
+                        silentGain.connect(audioCtx.destination);
+
+                        processor.onaudioprocess = (e) => {
+                            chunks.push(new Float32Array(e.inputBuffer.getChannelData(0)));
+                        };
+
+                        audioEl.addEventListener('ended', () => {
+                            finish(() => {
+                                const totalLength = chunks.reduce((sum, c) => sum + c.length, 0);
+                                if (totalLength === 0) {
+                                    reject(new Error('재생 캡처 결과가 비어 있습니다.'));
+                                    return;
+                                }
+                                const merged = new Float32Array(totalLength);
+                                let offset = 0;
+                                for (const c of chunks) { merged.set(c, offset); offset += c.length; }
+                                resolve(resampleLinear(merged, audioCtx.sampleRate, targetSampleRate));
+                            });
+                        });
+
+                        const playPromise = audioEl.play();
+                        if (playPromise && typeof playPromise.catch === 'function') {
+                            playPromise.catch(playErr => {
+                                finish(() => reject(new Error(`오디오 자동 재생이 차단되었습니다: ${playErr.message}`)));
+                            });
+                        }
+                    } catch (setupErr) {
+                        finish(() => reject(setupErr));
+                    }
+                });
+
+                // 안전장치: 예상 재생 시간보다 훨씬 오래 걸리면 타임아웃 처리
+                audioEl.addEventListener('loadedmetadata', () => {
+                    const expectedMs = (isFinite(audioEl.duration) && audioEl.duration > 0 ? audioEl.duration : 300) * 1000;
+                    setTimeout(() => {
+                        finish(() => reject(new Error('재생 캡처 방식 디코딩이 시간 내에 끝나지 않았습니다.')));
+                    }, expectedMs + 20000);
+                });
+            });
         }
 
         // 선형보간 기반 경량 리샘플러
