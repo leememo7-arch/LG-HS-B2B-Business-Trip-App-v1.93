@@ -649,31 +649,31 @@
                             텍스트 기반 분석</span>
                     </div>
 
-                    <!-- 음성 인식 엔진 안내 (오픈소스 Whisper, API Key 불필요) -->
-                    <div class="bg-emerald-50 border border-emerald-200 rounded-xl p-3">
+                    <!-- 안내: 텍스트 입력 권장 -->
+                    <div class="bg-blue-50 border border-blue-200 rounded-xl p-3">
                         <div class="flex items-center gap-2">
-                            <i class="fa-solid fa-microchip text-emerald-600 text-xs"></i>
-                            <span class="text-[10px] font-bold text-emerald-800">음성 인식: 브라우저 내장 오픈소스 Whisper AI
-                                (API Key 불필요, 완전 무료)</span>
+                            <i class="fa-solid fa-circle-info text-blue-600 text-xs"></i>
+                            <span class="text-[10px] font-bold text-blue-800">텍스트로 입력하시면 가장 정확하고 빠르게 요약됩니다</span>
                         </div>
-                        <p class="text-[9px] text-emerald-600 mt-1">음성 파일 업로드 시 브라우저에서 직접 실행되어 서버로 전송되지 않으며,
-                            최초 1회 인식 모델을 내려받은 뒤에는 오프라인으로도 동작합니다.</p>
+                        <p class="text-[9px] text-blue-600 mt-1">음성 파일 인식(오픈소스 Whisper, 실험적 기능)은 발음·주변 소음·회의
+                            언어에 따라 정확도가 낮아질 수 있습니다. 받아적은 메모나 대화 내용을 텍스트로 입력하시는 방법을
+                            권장합니다.</p>
                     </div>
 
                     <!-- 입력 방식 탭 -->
                     <div class="bg-gray-100 p-1 rounded-xl flex gap-1">
-                        <button id="min-tab-audio" onclick="switchMinutesTab('audio')"
-                            class="flex-1 py-1.5 text-[11px] font-bold rounded-lg bg-white text-gray-800 shadow-sm flex items-center justify-center gap-1.5 transition-all">
-                            <i class="fa-solid fa-file-import text-lgRed"></i> 텍스트/음성 파일 업로드
-                        </button>
                         <button id="min-tab-text" onclick="switchMinutesTab('text')"
+                            class="flex-1 py-1.5 text-[11px] font-bold rounded-lg bg-white text-gray-800 shadow-sm flex items-center justify-center gap-1.5 transition-all">
+                            <i class="fa-solid fa-file-lines text-lgRed"></i> 텍스트 직접 입력 (권장)
+                        </button>
+                        <button id="min-tab-audio" onclick="switchMinutesTab('audio')"
                             class="flex-1 py-1.5 text-[11px] font-medium rounded-lg text-gray-500 flex items-center justify-center gap-1.5 transition-all">
-                            <i class="fa-solid fa-file-lines"></i> 텍스트 직접 입력
+                            <i class="fa-solid fa-file-import"></i> 텍스트/음성 파일 업로드
                         </button>
                     </div>
 
                     <!-- 텍스트/음성 파일 업로드 존 -->
-                    <div id="min-audio-zone" class="space-y-2">
+                    <div id="min-audio-zone" class="space-y-2 hidden">
                         <div id="min-dropzone"
                             class="border-2 border-dashed border-gray-300 hover:border-lgRed bg-white rounded-xl p-6 text-center cursor-pointer transition-all duration-200 group relative overflow-hidden">
                             <input type="file" id="audio-file-input"
@@ -687,12 +687,13 @@
                                 <p class="text-xs font-bold text-gray-700">회의 텍스트 파일 또는 음성 녹음 파일을 드래그하거나 클릭하여 선택
                                 </p>
                                 <p class="text-[10px] text-gray-400 mt-1">텍스트: .txt · .md · .json · .csv · .log</p>
-                                <p class="text-[10px] text-gray-400">음성: .m4a · .mp3 · .wav · .mp4 · .ogg · .webm ·
-                                    .aac · .flac · .opus</p>
+                                <p class="text-[10px] text-gray-400">음성(실험적): .m4a · .mp3 · .wav · .mp4 · .ogg ·
+                                    .webm · .aac · .flac · .opus</p>
                                 <p class="text-[9px] text-green-600 font-semibold mt-1">★ 음성 파일은 실제 발화 내용을 텍스트로
-                                    변환한 뒤, 전문 회의 기록 관리자 페르소나로 3단 구성 고품질 요약을 진행합니다</p>
-                                <p class="text-[9px] text-amber-600 font-semibold mt-0.5">※ 오픈소스 Whisper AI가 브라우저에서
-                                    직접 인식합니다 (API Key 불필요). 긴 음성은 다소 시간이 걸릴 수 있습니다.</p>
+                                    변환한 뒤, 전문 회의 기록 관리자 페르소나로 상세 요약을 진행합니다</p>
+                                <p class="text-[9px] text-amber-600 font-semibold mt-0.5">※ 브라우저 내장 오픈소스 Whisper AI가
+                                    인식합니다 (API Key 불필요). 정확도가 낮게 나올 경우, 인식된 텍스트를 직접 수정한 뒤
+                                    분석하시면 더 좋은 결과를 얻을 수 있습니다.</p>
                             </div>
                             <!-- 선택된 파일 정보 (기본 숨김) -->
                             <div id="min-file-info" class="hidden items-center gap-3 text-left">
@@ -729,7 +730,7 @@
                     </div>
 
                     <!-- 텍스트 직접 입력 존 -->
-                    <div id="min-text-zone" class="hidden">
+                    <div id="min-text-zone">
                         <div class="bg-white border border-gray-200 rounded-xl p-3 shadow-sm">
                             <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1.5">회의
                                 원본 텍스트 / 대화 메모</label>
@@ -895,9 +896,17 @@
                                 <span id="min-meta-date" class="font-bold text-gray-700 text-xs"></span>
                             </div>
                             <div class="bg-gray-50 p-2 rounded-lg border border-gray-100">
+                                <span class="text-gray-400 block text-[10px] font-semibold mb-0.5">장소</span>
+                                <span id="min-meta-location" class="font-bold text-gray-700 text-xs leading-tight"></span>
+                            </div>
+                            <div class="bg-gray-50 p-2 rounded-lg border border-gray-100 col-span-2">
                                 <span class="text-gray-400 block text-[10px] font-semibold mb-0.5">참석자</span>
                                 <span id="min-meta-participants"
-                                    class="font-bold text-gray-700 text-xs leading-tight"></span>
+                                    class="font-bold text-gray-700 text-xs leading-tight whitespace-pre-line"></span>
+                            </div>
+                            <div class="bg-red-50 p-2 rounded-lg border border-red-100 col-span-2">
+                                <span class="text-lgRed block text-[10px] font-semibold mb-0.5">주요 논의 사항</span>
+                                <span id="min-meta-topic" class="font-bold text-gray-700 text-xs leading-tight"></span>
                             </div>
                         </div>
                     </div>
@@ -6402,7 +6411,7 @@ LG전자 B2B 해외 출장 일정에 따른 호텔 예약을 요청 드립니다
 
         // MinutesAI에서 선택된 파일 전역 저장
         let minutesSelectedFile = null;
-        let minutesActiveTab = 'audio'; // 'audio' | 'text'
+        let minutesActiveTab = 'text'; // 'audio' | 'text' — 텍스트 입력을 기본값으로 권장
         let minutesLastResult = null;   // 마지막 Gemini JSON 응답
 
         // 입력 탭 전환 (음성 / 텍스트)
@@ -6893,8 +6902,8 @@ LG전자 B2B 해외 출장 일정에 따른 호텔 예약을 요청 드립니다
             const dayOfWeek = days[today.getDay()];
             const formattedDate = `${year}.${month}.${date} (${dayOfWeek})`;
 
-            return `당신은 전문적인 회의 기록 관리자입니다.
-제공된 B2B 해외 출장 회의 대화 내용(실제 텍스트)을 분석하여 체계적이고 완성도 높은 회의록을 작성하세요. 반드시 아래 [회의 대화 내용]에 실제로 언급된 사실만을 근거로 작성하고, 내용을 지어내지 마십시오.
+            return `당신은 10년 이상 경력의 전문 회의록 작성 담당자입니다.
+제공된 B2B 해외 출장 회의 대화 내용(실제 텍스트)을 분석하여, 실제 기업에서 사용하는 수준의 구체적이고 완성도 높은 회의록을 작성하세요. 반드시 아래 [회의 대화 내용]에 실제로 언급된 사실만을 근거로 작성하고, 내용을 지어내지 마십시오.
 
 [★ 다국어 처리 지침: 최우선 필수 준수]
 [회의 대화 내용]의 원문이 한국어가 아니거나(영어, 중국어, 일본어, 베트남어 등), 여러 언어가 섞여 있거나, 화자별로 서로 다른 언어를 사용하더라도, 최종 회의록(아래 markdownResult 및 모든 필드)은 예외 없이 반드시 100% 한국어로만 작성해야 합니다. 원문을 먼저 정확히 이해한 뒤 자연스러운 한국어로 의역하여 작성하십시오. 외국어 문장이나 단어를 그대로 남겨두지 마십시오. 다만 회사명·제품명·인명 등 고유명사는 원문 표기를 유지해도 됩니다.
@@ -6904,61 +6913,59 @@ LG전자 B2B 해외 출장 일정에 따른 호텔 예약을 요청 드립니다
 - 일정: ${tripInfo.period}
 - 출장 목적: ${tripInfo.purpose}
 
+[★ 구체성 지침: 최우선 필수 준수 — 절대 두루뭉술하게 쓰지 말 것]
+아래는 실제 기업 회의록에서 요구되는 구체성의 예시입니다. 이 정도의 정보 밀도로 작성해야 합니다:
+- 나쁜 예 (금지): "제품 협력에 대해 논의함", "향후 협력 방안을 검토하기로 함"
+- 좋은 예 (지향): "현대HT가 베트남 현지 월패드 사업 수주 시, LG전자의 가전(오븐, 쿡탑, 후드, 인덕션 등)을 제안하는 협력 체계를 구축함", "베트남 B2B 전담 인원인 담당자 A가 상대사와의 수주 활동에 직접 참여하여 기술 지원 및 제품 소개를 전담하기로 함"
+각 논의 사항 bullet은 반드시 다음을 포함하도록 작성하십시오: (1) 누가/어느 조직이 (2) 무엇을 (3) 어떻게 하기로 했는지 실제 언급된 고유명사·제품명·수치·기한을 그대로 반영하여 한 문장으로 구체적으로 서술. 대화에서 명시적으로 언급되지 않은 세부사항은 절대 지어내지 말고, 언급된 범위 내에서 최대한 구체적으로 압축하십시오.
+
 [분석 절차 및 회의 정보 추출 지침]
-1. 대화 내용(또는 업로드된 텍스트 파일 내용)에서 회의 주제, 주요 안건, 제품별/부문별 논의 및 결정사항, 향후 계획(Next Step)을 정확히 파악하여 다음 양식에 맞추어 작성하십시오.
-   ★ 중요: 만약 회의 대화 내용(또는 업로드된 텍스트)의 첫 부분이나 본문 중에 구체적인 회의 일시(날짜/시간), 회의 장소, 참석자 목록, 회의 안건 정보가 명시적으로 기록되어 있다면, 아래 템플릿의 기본값 대신에 반드시 대화 내용 속의 실제 정보를 추출하고 정제하여 사용해야 합니다.
-2. 아래 3단 구성 및 표 형식 템플릿 양식에 반드시 맞춰 최종 회의록을 작성하세요. 다른 불필요한 섹션번호나 구성을 임의로 만들지 마십시오.
+1. 대화 내용에서 회의 제목, 실제 일시(날짜/시간), 장소, 참석자(소속별로 구분), 주요 논의 사항 한 줄 요약, 안건별 세부 논의 내용, 결정 사항, 향후 실행 과제를 정확히 추출하십시오.
+   ★ 중요: 대화 내용 중에 구체적인 회의 일시, 장소, 참석자 목록이 명시적으로 기록되어 있다면, 반드시 그 실제 정보를 그대로 사용하십시오. 언급이 없는 경우에만 아래 기본값을 사용하십시오.
+2. 안건은 대화에서 실제로 논의된 주제 개수만큼 자연스럽게 나누십시오 (보통 2~5개). 각 안건 제목은 "1. 빌더 시장 공략을 위한 가전 제안 협력"처럼 핵심 내용이 드러나는 구체적인 제목으로 작성하고, 그 아래 2~4개의 구체적인 하위 bullet(각 "- "로 시작)을 작성하십시오.
+3. 마지막 안건 다음에는 반드시 "향후 실행 과제 (Action Items)" 섹션을 두고, 각 항목을 "→ [담당팀/담당자] 구체적인 실행 내용" 형식으로 작성하십시오.
 
-[회의록 템플릿 양식]
-1. 회의 개요
-회의 주제: [실제 대본/텍스트 내 회의 주제 또는 '${subject || 'B2B 미팅 및 세부 가이드라인 조율'}']
-주요 안건:
-- (안건 1)
-- (안건 2)
+[회의록 markdownResult 작성 양식 — 반드시 이 형식을 그대로 따를 것]
+${subject || '(회의 제목 - 상대사명 및 논의 주제가 드러나도록)'}
 
-2. 제품별 주요 논의 및 결정 사항
-[제품명/부문명 (예: 후드 (Hood), 오븐 (Oven), 가스쿡탑 (Gas Cooktop), 인덕션 (Induction) 등)]
-- (주요 논의 내용 및 합의/결정 사항 1)
-- (주요 논의 내용 및 합의/결정 사항 2)
+일시 : (실제 파싱된 날짜 및 요일, 시간) 또는 '${formattedDate}'
+장소 : (실제 장소명, 없으면 '${tripInfo.country} 현지 미팅룸')
+참석자 : LG전자 : (이름/직책)
+         (상대사명) : (이름/직책)
 
-[제품명/부문명]
-- (주요 논의 내용 및 합의/결정 사항 1)
-- (주요 논의 내용 및 합의/결정 사항 2)
+주요 논의 사항 : (전체 회의를 한 줄로 압축한 핵심 주제)
 
-3. 향후 계획 (Next Step)
-- (향후 계획 및 일정 1)
-- (향후 계획 및 일정 2)
+1. (첫 번째 안건 제목 - 구체적으로)
+- (구체적 논의 내용 1)
+- (구체적 논의 내용 2)
 
-4. 회의 핵심 요약 대장 (표 형식)
-★ 필수: 아래 3가지 요약 표를 반드시 Markdown 테이블(표) 형태로 출력하십시오.
+2. (두 번째 안건 제목)
+- (구체적 논의 내용 1)
+- (구체적 논의 내용 2)
 
-가. 회의 참여자별 발언 요약 표
-| 참여자 (Speaker) | 역할/직급 (Role) | 주요 발언 요약 (Statement Summary) |
-| :--- | :--- | :--- |
-| [성명/직책] | [소속 또는 추정 역할] | [이 참여자가 회의 중 언급한 핵심 의견 및 보고 사항의 한 줄 요약] |
+(안건 수만큼 반복, 보통 2~5개)
 
-나. 주요 결정 사항 (Decision) 표
-| 번호 (No.) | 결정 사항 (Decision Details) | 관련 부문/제품 (Product/Area) |
-| :--- | :--- | :--- |
-| 1 | [최종 합의 및 결정된 핵심 사항] | [해당 결정사항이 속한 제품군 또는 영역] |
-
-다. Action Items 및 마감 기한 표
-| 번호 (No.) | 액션 아이템 (Action Item) | 담당자 (Assignee) | 마감 기한 (Due Date) |
-| :--- | :--- | :--- | :--- |
-| 1 | [앞으로 진행해야 할 세부 실천 과제] | [담당 참여자 이름] | [명시된 완료 목표 일자 또는 ASAP/차주 중 등] |
+향후 실행 과제 (Action Items)
+→ [담당팀/담당자] (구체적 실행 내용 1)
+→ [담당팀/담당자] (구체적 실행 내용 2)
 
 반드시 아래 JSON 스키마로만 응답하세요 (다른 설명, 인사말, 마크다운 코드펜스(triple backtick) 없이 순수 JSON 객체만 반환):
 {
-  "title": "회의 제목 (간결하고 명확하게)",
-  "date": "실제 파싱된 회의 일시/날짜 또는 '${formattedDate}'",
-  "participants": "실제 파싱된 회의 참석자 명단 또는 대표 참석자 외 N명 추정",
+  "title": "회의 제목 (상대사명·주제가 드러나도록 구체적으로, 예: 'OO사 베트남 수주 연계 LG전자 B2B 가전 협업 방안 논의')",
+  "date": "실제 파싱된 회의 일시(날짜+시간) 또는 '${formattedDate}'",
+  "location": "실제 파싱된 회의 장소 또는 추정 장소",
+  "participants": "LG전자: 이름/직책 | 상대사명: 이름/직책 (소속별로 구분하여 명확히)",
+  "mainTopic": "회의 전체를 한 줄로 압축한 핵심 주제",
+  "sections": [
+    { "title": "안건 제목 (구체적으로)", "bullets": ["구체적 논의 내용 1", "구체적 논의 내용 2"] }
+  ],
   "decisions": [
-    { "topic": "제품/부문명", "summary": "합의 및 결정사항" }
+    { "topic": "안건/부문명", "summary": "구체적인 합의 및 결정사항" }
   ],
   "actionItems": [
-    { "task": "할 일", "assignee": "담당자", "dueDate": "기한" }
+    { "task": "구체적인 실행 내용", "assignee": "담당팀/담당자", "dueDate": "기한(명시된 경우) 또는 빈 문자열" }
   ],
-  "markdownResult": "위 3단 구성 및 4번 표 형식 템플릿 양식 규격에 맞춰 마크다운 형식으로 포맷팅된 최종 회의록 본문"
+  "markdownResult": "위 [회의록 markdownResult 작성 양식]을 그대로 따른 최종 회의록 전문 (마크다운 기호 없이 위 양식의 줄바꿈/구조 그대로)"
 }`;
         }
 
@@ -7385,32 +7392,35 @@ LG전자 B2B 해외 출장 일정에 따른 호텔 예약을 요청 드립니다
                 actionTable += `| ${idx + 1} | ${item.task} | ${item.assignee} | ${item.dueDate} |\n`;
             });
 
-            // 마크다운 문자열 조립 (3단 표준 양식 + 4번 요약 표 포함)
-            let mdResult = `1. 회의 개요
-회의 주제: ${extractedSubject}
-주요 안건:
-${agendaList}
+            // 마크다운 문자열 조립 (헤더 블록 + 안건별 섹션 + 화살표 실행과제 형식)
+            const fallbackSections = [
+                { title: `${extractedSubject} 관련 주요 논의`, bullets: agendaList.split('\n').map(s => s.replace(/^-\s*/, '').trim()).filter(Boolean) },
+                { title: '제품별 세부 논의 사항', bullets: productDiscussions.split('\n').map(s => s.replace(/^-\s*/, '').trim()).filter(s => s && !/^[가-힣A-Za-z].*\(.*\)$/.test(s)) }
+            ].filter(s => s.bullets.length > 0);
 
-2. 제품별 주요 논의 및 결정 사항
-${productDiscussions.trim()}
+            const actionArrowLines = actionItems.map(item => `→ [${item.assignee}] ${item.task}${item.dueDate ? ` (기한: ${item.dueDate})` : ''}`).join('\n');
 
-3. 향후 계획 (Next Step)
-${nextStepsText}
+            let mdResult = `${extractedSubject}
 
-4. 회의 핵심 요약 대장 (표 형식)
-가. 회의 참여자별 발언 요약 표
-${speakerTable}
+일시 : ${extractedDate}
+장소 : ${extractedLocation}
+참석자 : ${extractedParticipants}
 
-나. 주요 결정 사항 (Decision) 표
-${decisionTable}
+주요 논의 사항 : ${extractedSubject}
 
-다. Action Items 및 마감 기한 표
-${actionTable}`;
+`;
+            fallbackSections.forEach((sec, idx) => {
+                mdResult += `${idx + 1}. ${sec.title}\n${sec.bullets.map(b => `- ${b}`).join('\n')}\n\n`;
+            });
+            mdResult += `향후 실행 과제 (Action Items)\n${actionArrowLines}`;
 
             return {
                 title: extractedSubject || '회의 분석 보고서',
                 date: extractedDate,
+                location: extractedLocation,
                 participants: extractedParticipants,
+                mainTopic: extractedSubject,
+                sections: fallbackSections,
                 decisions,
                 actionItems,
                 markdownResult: mdResult,
@@ -7430,7 +7440,10 @@ ${actionTable}`;
 
             // 회의 개요
             document.getElementById('min-meta-date').textContent = data.date || '-';
+            document.getElementById('min-meta-location').textContent = data.location || '-';
             document.getElementById('min-meta-participants').textContent = data.participants || '-';
+            const topicEl = document.getElementById('min-meta-topic');
+            if (topicEl) topicEl.textContent = data.mainTopic || '-';
 
             // 3단 구성 회의록 마크다운 에디터 값 할당
             const mdEditor = document.getElementById('min-markdown-editor');
@@ -7438,10 +7451,21 @@ ${actionTable}`;
                 mdEditor.value = data.markdownResult || '';
             }
 
-            // 의사결정 목록
+            // 의사결정 목록 (sections가 있으면 안건별 상세 내용을, 없으면 decisions를 표시)
             const decisionsEl = document.getElementById('min-decisions');
             decisionsEl.innerHTML = '';
-            if (data.decisions && data.decisions.length > 0) {
+            if (data.sections && data.sections.length > 0) {
+                data.sections.forEach((sec, idx) => {
+                    const div = document.createElement('div');
+                    div.className = 'border-l-2 border-emerald-300 pl-3 space-y-0.5';
+                    const bulletsHtml = (sec.bullets || []).map(b => `<li>${b}</li>`).join('');
+                    div.innerHTML = `
+                        <p class="text-[10px] font-bold text-emerald-700 uppercase tracking-wide">${idx + 1}. ${sec.title || ''}</p>
+                        <ul class="text-[11px] text-gray-700 leading-relaxed list-disc pl-4 space-y-0.5">${bulletsHtml}</ul>
+                    `;
+                    decisionsEl.appendChild(div);
+                });
+            } else if (data.decisions && data.decisions.length > 0) {
                 data.decisions.forEach((d, idx) => {
                     const div = document.createElement('div');
                     div.className = 'border-l-2 border-emerald-300 pl-3 space-y-0.5';
@@ -7613,6 +7637,12 @@ ${actionTable}`;
                 title: d.title || '3단 표준 회의록',
                 content: markdownVal, // 마크다운 에디터의 수정된 텍스트 자체를 저장
                 action: actionSummary || '없음',
+                date: d.date || '',
+                location: d.location || '',
+                participants: d.participants || '',
+                mainTopic: d.mainTopic || '',
+                sections: d.sections || [],
+                actionItemsList: d.actionItems || [],
                 timestamp: Date.now()
             });
 
@@ -10442,6 +10472,11 @@ ${context.scheduleTopic ? `- 미팅 안건: ${context.scheduleTopic}` : ''}
                 }
             }
 
+            // ── 첨부 템플릿(보고서_템플릿.pptx)에서 추출한 실제 그래픽 자산 (PPT/Excel 표지 공통 사용) ──
+            const LG_LBRACKET_IMG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAALEAAAIGCAYAAAAbeW4hAAAELUlEQVR42u3XMYoCQRBA0SodVsHAEwiewCMom2wmXtUbiAoae4llcxF1RNp0rtA772WTNVWfpid3k9U2MzZRgVLi+H3bLwM6BkaAiEHEIGJEDCIGEYOIETGIGEQMIkbEIGIQMYgYEYOIQcQgYkQMIgYRg4gRMYgYRAwiRsQgYhAxiBgRg4hBxCBiRAwiBhGDiBExiBhEDCJGxCBiEDGIGBGDiEHEIGJEDCIGEYOIETGIGEQMIkbEIGIQMYgYEYOIQcQgYkQMIgYRg4gRMYgYRAwiRsQgYhAxiBgRg4hBxCBiRAwiBhGDiBExiBhEDCJGxCBiEDGIGBGDiEHEIGJEDCIGEYOIETGIGEQMIkbEIGIQMYgYEYOIQcQgYkQMIgYRg4gRMYgYRAwiRsQgYhAxiBgRg4hBxIgYRAwiBhEjYhAxiBhEjIhBxCBiEDEiBhGDiEHEiBhEDCIGESNiEDGIGESMiEHEIGIQMSIGEYOIQcSIGEQMIgYRI2IQMYgYRIyIQcQgYhAxIgYRg4hBxIgYRAwiBhEjYhAxiBhEjIhBxCBiEDEiBhGDiEHEiBhEDCIGESNiEDGIGESMiEHEIGIQMSIGEYOIQcSIGEQMIgYRI2IQMYgYRIyIQcQgYhAxIgYRg4hBxIgYRAwiBhEjYhAxiBhEjIhBxCBiEDEiBhGDiEHEiBhEDCIGESNiEDGIGESMiEHEIGIQMSIGEYOIEbERIGIQMYgYEYOIQcQgYkQMIgYRg4gRMYgYRAwiRsQgYhAxiBgRg4hBxCBiRAwiBhGDiBExiBhEDCJGxCBiEDGIGBGDiEHEIGJEDCIGEYOIETGIGEQMIkbEIGIQMYgYEYOIQcQgYkQMIgYRg4gRMYgYRAwiRsQgYhAxiBgRg4hBxCBiRAwiBhGDiBExiBhEDCJGxCBiEDGIGBGDiEHEIGJEDCIGEYOIETGIGEQMIkbEIGIQMYgYEYOIQcQgYkQMIgYRg4gRMYgYRAwiRsQgYhAxiBgRg4hBxCBiRAwiBhGDiBExiBhEDCJGxCBiEDEiBhGDiEHEiBhEDCIGESNiEDGIGESMiEHEIGIQMSIGEYOIQcSIGEQMIgYRI2IQMYgYRIyIQcQgYhAxIgYRg4hBxIgYRAwiBhEjYhAxiBhEjIhBxCBiEDEiBhGDiEHEiBhEDCIGESNiEDGIGESMiEHEIGIQMSIGEYOIQcSIGEQMIgYRI2IQMYgYRIyIQcQgYhAxIgYRg4hBxPxPTWXnHZ+nq7m19du1fbU/99NvlRFnlsXznQdr7LevYXOJiHWlN3GOImJmjf1WIv+8ifFjByIGEYOIETGIGEQMIkbEIGIQMYgYEYOIQcQgYkQMIgYRg4gRMYgYRAwiRsQgYhAxIgYRg4hBxIgYRAwiBhEjYhAxiBhETH81kfGIUm5GQS0y8t79/gBfqx8hhfma5AAAAABJRU5ErkJggg==';
+            const LG_SWOOSH_IMG = 'data:image/png;base64,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';
+            const LG_LOGO_IMG = 'data:image/png;base64,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';
+
             try {
                 if (type === 'excel') {
                     // ═══════════════════════════════════════════════════
@@ -10452,43 +10487,75 @@ ${context.scheduleTopic ? `- 미팅 안건: ${context.scheduleTopic}` : ''}
                     // 시트 1: 출장 개요 및 일정
                     const ws1 = workbook.addWorksheet('출장 개요 및 일정');
 
-                    // 제목 스타일 및 값
+                    // ── 표지 영역 (PPT 표지와 동일한 디자인: 제목 + 목차 + LG 로고) ──
                     ws1.mergeCells('A1:F1');
-                    const titleCell1 = ws1.getCell('A1');
-                    titleCell1.value = 'LG전자 B2B 해외 출장 종합 보고서 (출장 개요 및 세부 일정)';
-                    titleCell1.font = { name: '맑은 고딕', size: 16, bold: true, color: { argb: 'FFFFFFFF' } };
-                    titleCell1.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFA50034' } }; // LG Deep Red
-                    titleCell1.alignment = { horizontal: 'center', vertical: 'middle' };
-                    ws1.getRow(1).height = 40;
+                    const coverTitleCell = ws1.getCell('A1');
+                    coverTitleCell.value = 'LG전자 B2B 해외 출장 종합 보고서';
+                    coverTitleCell.font = { name: '맑은 고딕', size: 20, bold: true, color: { argb: 'FF595959' } };
+                    coverTitleCell.alignment = { horizontal: 'left', vertical: 'middle' };
+                    coverTitleCell.border = { left: { style: 'thick', color: { argb: 'FFA50034' } } };
+                    ws1.getRow(1).height = 42;
 
-                    // 기본 정보
-                    ws1.getCell('A3').value = '[출장 기본 정보]';
-                    ws1.getCell('A3').font = { name: '맑은 고딕', size: 11, bold: true };
+                    // LG 로고 이미지 (표지 우측 상단, PPT 표지와 동일한 실제 로고 이미지 사용)
+                    const excelLogoImageId = workbook.addImage({ base64: LG_LOGO_IMG, extension: 'png' });
+                    ws1.addImage(excelLogoImageId, {
+                        tl: { col: 4.3, row: 0.15 },
+                        ext: { width: 110, height: 48 }
+                    });
 
-                    ws1.getCell('A4').value = '출장 국가';
-                    ws1.getCell('B4').value = tripInfo.country;
-                    ws1.getCell('A5').value = '출장 일정';
-                    ws1.getCell('B5').value = tripInfo.period;
-                    ws1.getCell('A6').value = '참석 인원';
-                    ws1.getCell('B6').value = tripInfo.members;
-                    ws1.getCell('A7').value = '주요 목적';
-                    ws1.getCell('B7').value = tripInfo.purpose;
+                    // 보고서 목차 (PPT 표지와 동일한 5개 목차)
+                    const excelCoverAgenda = [
+                        `1. 출장 개요 및 세부 일정 (${tripInfo.country})`,
+                        `2. 주요 비즈니스 회의록 및 실행 과제`,
+                        `3. 현장 시각자료 AI 분석 보고서`,
+                        `4. 출장 경비 집행 현황 요약`,
+                        `5. 상세 경비 영수증 증빙 및 내역`
+                    ];
+                    excelCoverAgenda.forEach((item, idx) => {
+                        const rowNum = 3 + idx;
+                        ws1.mergeCells(`A${rowNum}:F${rowNum}`);
+                        const cell = ws1.getCell(`A${rowNum}`);
+                        cell.value = item;
+                        cell.font = { name: '맑은 고딕', size: 11, bold: true, color: { argb: 'FF595959' } };
+                        cell.alignment = { horizontal: 'left', vertical: 'middle' };
+                        ws1.getRow(rowNum).height = 20;
+                    });
 
-                    ['A4', 'A5', 'A6', 'A7'].forEach(cell => {
+                    // 하단 부제 (문서명 | 생성일자)
+                    ws1.mergeCells('A8:F8');
+                    const coverSubtitleCell = ws1.getCell('A8');
+                    coverSubtitleCell.value = `해외출장보고서  |  ${new Date().toLocaleDateString('ko-KR')}`;
+                    coverSubtitleCell.font = { name: '맑은 고딕', size: 10, color: { argb: 'FF595959' } };
+                    ws1.getRow(9).height = 8; // 표지와 본문 사이 여백
+
+                    // ── 본문: 출장 기본 정보 ──
+                    ws1.getCell('A10').value = '[출장 기본 정보]';
+                    ws1.getCell('A10').font = { name: '맑은 고딕', size: 11, bold: true };
+
+                    ws1.getCell('A11').value = '출장 국가';
+                    ws1.getCell('B11').value = tripInfo.country;
+                    ws1.getCell('A12').value = '출장 일정';
+                    ws1.getCell('B12').value = tripInfo.period;
+                    ws1.getCell('A13').value = '참석 인원';
+                    ws1.getCell('B13').value = tripInfo.members;
+                    ws1.getCell('A14').value = '주요 목적';
+                    ws1.getCell('B14').value = tripInfo.purpose;
+
+                    ['A11', 'A12', 'A13', 'A14'].forEach(cell => {
                         ws1.getCell(cell).font = { name: '맑은 고딕', size: 9, bold: true };
                         ws1.getCell(cell).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF9F9F9' } };
                     });
 
                     // 일정 리스트
-                    ws1.getCell('A9').value = '[출장 미팅 상세 일정]';
-                    ws1.getCell('A9').font = { name: '맑은 고딕', size: 11, bold: true };
+                    ws1.getCell('A16').value = '[출장 미팅 상세 일정]';
+                    ws1.getCell('A16').font = { name: '맑은 고딕', size: 11, bold: true };
 
                     const scheduleHeader = ["일정 구분", "시간", "미팅 상대", "주요 안건 및 미팅 주제", "구글맵 위치 주소", "등록사진 개수"];
-                    ws1.getRow(10).values = scheduleHeader;
-                    ws1.getRow(10).font = { name: '맑은 고딕', size: 10, bold: true, color: { argb: 'FFFFFFFF' } };
-                    ws1.getRow(10).height = 25;
+                    ws1.getRow(17).values = scheduleHeader;
+                    ws1.getRow(17).font = { name: '맑은 고딕', size: 10, bold: true, color: { argb: 'FFFFFFFF' } };
+                    ws1.getRow(17).height = 25;
                     for (let col = 1; col <= 6; col++) {
-                        const cell = ws1.getCell(10, col);
+                        const cell = ws1.getCell(17, col);
                         cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFA50034' } };
                         cell.alignment = { horizontal: 'center', vertical: 'middle' };
                     }
@@ -10500,7 +10567,7 @@ ${context.scheduleTopic ? `- 미팅 안건: ${context.scheduleTopic}` : ''}
 
                     // 테두리 및 정렬
                     ws1.eachRow((row, rowNumber) => {
-                        if (rowNumber > 9) {
+                        if (rowNumber > 16) {
                             row.font = { name: '맑은 고딕', size: 10 };
                             row.alignment = { vertical: 'middle' };
                             row.border = {
@@ -10893,6 +10960,7 @@ ${context.scheduleTopic ? `- 미팅 안건: ${context.scheduleTopic}` : ''}
                     const pptx = new PptxGenJS();
                     pptx.layout = 'LAYOUT_16x9'; // PptxGenJS의 기본 16:9 레이아웃 (가로 10.0인치, 세로 5.625인치)
 
+
                     // ── 첨부 템플릿(보고서_템플릿.pptx) 디자인 공통 적용 헬퍼 ──
                     // 모든 콘텐츠 슬라이드에 상단 "LGE Internal Use Only" 표시 박스와
                     // 헤더 구분선, 하단 "| CONFIDENTIAL |" 푸터를 템플릿과 동일하게 적용한다.
@@ -10918,28 +10986,33 @@ ${context.scheduleTopic ? `- 미팅 안건: ${context.scheduleTopic}` : ''}
                         });
                     };
 
-                    // ─ 슬라이드 1: 표지 (첨부 템플릿의 백색 배경 + L자 브라켓 + LG 로고 표지 디자인 반영) ─
+                    // ─ 슬라이드 1: 표지 (첨부 템플릿의 실제 그래픽 자산 + 정확한 비율 반영) ─
                     const slide1 = pptx.addSlide();
                     slide1.background = { color: 'FFFFFF' };
 
-                    // 상단 "LGE Internal Use Only" 안내 배너 (템플릿 반영)
-                    slide1.addShape(pptx.shapes.LINE, { x: 0, y: 0.32, w: 10.0, h: 0, line: { color: 'BFBFBF', width: 0.75 } });
+                    // 상단 "LGE Internal Use Only" 안내 배너 (템플릿 실측 비율 반영)
+                    slide1.addShape(pptx.shapes.LINE, { x: 0, y: 0.28, w: 10.0, h: 0, line: { color: 'BFBFBF', width: 0.75 } });
                     slide1.addText('LGE Internal Use Only', {
-                        x: 0, y: 0.06, w: 10.0, h: 0.26,
+                        x: 3.8, y: 0.05, w: 2.4, h: 0.15,
                         fontSize: 9, color: '404040', align: 'center', fontFace: 'Arial'
                     });
 
-                    // 좌상단 L자 브라켓 (LG Deep Red 브랜드 컬러, 템플릿 표지 디자인 반영)
-                    slide1.addShape(pptx.shapes.RECTANGLE, { x: 0.35, y: 0.55, w: 0.1, h: 2.05, fill: 'A50034' });
-                    slide1.addShape(pptx.shapes.RECTANGLE, { x: 0.35, y: 2.5, w: 0.65, h: 0.1, fill: 'A50034' });
+                    // 전체 테두리 (템플릿 실측: 얇은 회색 테두리로 슬라이드 콘텐츠 영역을 감쌈)
+                    slide1.addShape(pptx.shapes.RECTANGLE, {
+                        x: 0.2, y: 0.16, w: 9.6, h: 5.32,
+                        fill: { type: 'none' }, line: { color: 'BFBFBF', width: 0.75 }
+                    });
 
-                    // 타이틀 (템플릿과 동일한 다크그레이 톤)
+                    // 좌상단 L자 브라켓 (템플릿에서 추출한 실제 이미지)
+                    slide1.addImage({ data: LG_LBRACKET_IMG, x: 0.2, y: 0.16, w: 0.74, h: 1.77 });
+
+                    // 타이틀 (템플릿과 동일한 다크그레이 톤, 실측 위치 반영)
                     slide1.addText("LG전자 B2B 해외 출장 종합 보고서", {
-                        x: 0.75, y: 1.55, w: 8.3, h: 0.95,
+                        x: 1.06, y: 1.53, w: 7.26, h: 0.66,
                         fontSize: 25, bold: true, color: '595959', fontFace: 'Malgun Gothic'
                     });
 
-                    // 보고서 목차 (템플릿의 5개 번호 목차 스타일 반영)
+                    // 보고서 목차 (템플릿의 5개 번호 목차 스타일 반영, 실측 위치)
                     const coverAgendaItems = [
                         `1. 출장 개요 및 세부 일정 (${tripInfo.country})`,
                         `2. 주요 비즈니스 회의록 및 실행 과제`,
@@ -10947,36 +11020,29 @@ ${context.scheduleTopic ? `- 미팅 안건: ${context.scheduleTopic}` : ''}
                         `4. 출장 경비 집행 현황 요약`,
                         `5. 상세 경비 영수증 증빙 및 내역`
                     ];
-                    let coverAgendaY = 2.75;
+                    let coverAgendaY = 2.42;
                     coverAgendaItems.forEach(item => {
                         slide1.addText(item, {
-                            x: 0.78, y: coverAgendaY, w: 7.6, h: 0.32,
+                            x: 1.29, y: coverAgendaY, w: 6.5, h: 0.32,
                             fontSize: 12.5, bold: true, color: '595959', fontFace: 'Malgun Gothic'
                         });
                         coverAgendaY += 0.34;
                     });
 
-                    // 하단 좌측 부제 (문서명 | 생성일자)
+                    // 하단 좌측 부제 (문서명 | 생성일자) — 실측 위치
                     slide1.addText(`해외출장보고서  |  ${new Date().toLocaleDateString('ko-KR')}`, {
-                        x: 0.78, y: 4.65, w: 5.0, h: 0.3,
+                        x: 1.22, y: 4.25, w: 5.0, h: 0.25,
                         fontSize: 11, color: '595959', fontFace: 'Malgun Gothic'
                     });
 
-                    // 하단 우측 LG 로고 마크 (원형 로고 + 레드 스우시, 템플릿 표지 디자인 반영)
-                    slide1.addShape(pptx.shapes.OVAL, { x: 7.55, y: 4.5, w: 0.55, h: 0.55, fill: 'A50034' });
-                    slide1.addText('LG', {
-                        x: 7.55, y: 4.5, w: 0.55, h: 0.55,
-                        fontSize: 15, bold: true, color: 'FFFFFF', align: 'center', valign: 'middle', fontFace: 'Arial'
-                    });
-                    slide1.addShape(pptx.shapes.ROUNDED_RECTANGLE, {
-                        x: 8.35, y: 4.45, w: 1.15, h: 0.4, rectRadius: 0.06,
-                        fill: 'A50034', rotate: 20
-                    });
+                    // 하단 우측 LG 로고 + 레드 스우시 (템플릿에서 추출한 실제 이미지, 실측 위치/비율)
+                    slide1.addImage({ data: LG_LOGO_IMG, x: 8.02, y: 4.30, w: 0.83, h: 0.365 });
+                    slide1.addImage({ data: LG_SWOOSH_IMG, x: 8.32, y: 4.29, w: 1.47, h: 1.45 });
 
-                    // 하단 CONFIDENTIAL 푸터 (템플릿 반영)
-                    slide1.addShape(pptx.shapes.LINE, { x: 0, y: 5.38, w: 10.0, h: 0, line: { color: 'BFBFBF', width: 0.75 } });
+                    // 하단 CONFIDENTIAL 푸터 (템플릿 실측 위치 반영)
+                    slide1.addShape(pptx.shapes.LINE, { x: 0, y: 5.46, w: 10.0, h: 0, line: { color: 'BFBFBF', width: 0.75 } });
                     slide1.addText('| CONFIDENTIAL |', {
-                        x: 0, y: 5.4, w: 10.0, h: 0.2,
+                        x: 0, y: 5.48, w: 10.0, h: 0.15,
                         fontSize: 8, bold: true, color: 'A50034', align: 'center', fontFace: 'Arial'
                     });
 
@@ -11009,7 +11075,7 @@ ${context.scheduleTopic ? `- 미팅 안건: ${context.scheduleTopic}` : ''}
                         fontSize: 9.5, fontFace: 'Malgun Gothic', valign: 'middle'
                     });
 
-                    // ─ 슬라이드 3: 회의록 요약 ─
+                    // ─ 슬라이드 3: 회의록 요약 (회의 1건당 1슬라이드, 첨부 참고 양식과 동일한 헤더+표 구조) ─
                     if (meetings.length === 0) {
                         const slide3 = pptx.addSlide();
                         addLGSlideChrome(slide3);
@@ -11022,48 +11088,107 @@ ${context.scheduleTopic ? `- 미팅 안건: ${context.scheduleTopic}` : ''}
                             fontSize: 13, color: '888888', fontFace: 'Malgun Gothic', align: 'center'
                         });
                     } else {
-                        const totalMeetingSlides = Math.ceil(meetings.length / 3);
-                        for (let sIdx = 0; sIdx < totalMeetingSlides; sIdx++) {
+                        meetings.forEach((m, mIdx) => {
                             const slide3 = pptx.addSlide();
                             addLGSlideChrome(slide3);
-                            const slideTitle = totalMeetingSlides > 1 
-                                ? `2. 주요 비즈니스 회의록 및 실행 과제 (${sIdx + 1}/${totalMeetingSlides})`
+
+                            const slideTitle = meetings.length > 1
+                                ? `2. 주요 비즈니스 회의록 및 실행 과제 (${mIdx + 1}/${meetings.length})`
                                 : `2. 주요 비즈니스 회의록 및 실행 과제`;
-                            
                             slide3.addText(slideTitle, {
-                                x: 0.4, y: 0.22, w: 7.2, h: 0.4,
-                                fontSize: 16, bold: true, color: '262626', fontFace: 'Malgun Gothic'
+                                x: 0.4, y: 0.14, w: 7.2, h: 0.3,
+                                fontSize: 11, bold: true, color: '888888', fontFace: 'Malgun Gothic'
                             });
 
-                            const startIndex = sIdx * 3;
-                            const endIndex = Math.min(startIndex + 3, meetings.length);
-                            let yPos = 0.9;
+                            // 회의 제목 (밑줄 강조)
+                            slide3.addText(m.title || '회의록', {
+                                x: 0.4, y: 0.42, w: 9.2, h: 0.35,
+                                fontSize: 14, bold: true, underline: true, color: '262626', fontFace: 'Malgun Gothic'
+                            });
 
-                            for (let i = startIndex; i < endIndex; i++) {
-                                const m = meetings[i];
-                                slide3.addShape(pptx.shapes.ROUNDED_RECTANGLE, {
-                                    x: 0.5, y: yPos, w: 9.0, h: 1.3,
-                                    fill: 'F9F9F9', line: { color: 'E0E0E0', width: 1 }
+                            // 헤더 정보 블록 (일시/장소/참석자/주요 논의 사항) — 저장된 구조화 필드 우선, 없으면 콘텐츠에서 보조 추출
+                            const mDate = m.date || (m.content.match(/일시\s*[:：]\s*(.+)/) || [])[1] || '';
+                            const mLocation = m.location || (m.content.match(/장소\s*[:：]\s*(.+)/) || [])[1] || '';
+                            const mParticipants = m.participants || (m.content.match(/참석자\s*[:：]\s*(.+)/) || [])[1] || '';
+                            const mTopic = m.mainTopic || (m.content.match(/주요\s*논의\s*사항\s*[:：]\s*(.+)/) || [])[1] || '';
+
+                            const headerLines = [];
+                            if (mDate) headerLines.push({ text: `일시 : ${mDate}\n`, options: { bold: true, fontSize: 9.5 } });
+                            if (mLocation) headerLines.push({ text: `장소 : ${mLocation}\n`, options: { bold: true, fontSize: 9.5 } });
+                            if (mParticipants) headerLines.push({ text: `참석자 : ${mParticipants}\n`, options: { bold: true, fontSize: 9.5 } });
+                            if (headerLines.length > 0) {
+                                slide3.addText(headerLines, {
+                                    x: 0.4, y: 0.78, w: 9.2, h: 0.6,
+                                    fontFace: 'Malgun Gothic', color: '404040', valign: 'top', lineSpacingMultiple: 1.15
                                 });
-
-                                const cleanContent = cleanMarkdownForSlide(m.content);
-                                const shortAction = m.action && m.action.length > 110 ? m.action.substring(0, 110) + "..." : (m.action || '없음');
-
-                                slide3.addText(
-                                    [
-                                        { text: `[회의 #${i + 1}] ${m.title}\n`, options: { bold: true, fontSize: 10, color: '262626' } },
-                                        { text: `• 내용: ${cleanContent}\n`, options: { fontSize: 8.5, color: '555555' } },
-                                        { text: `★ 실행 과제 (Action Item): ${shortAction}`, options: { bold: true, fontSize: 8.5, color: 'A50034' } }
-                                    ],
-                                    {
-                                        x: 0.7, y: yPos + 0.08, w: 8.6, h: 1.14,
-                                        fontFace: 'Malgun Gothic', valign: 'top', wrap: true
-                                    }
-                                );
-
-                                yPos += 1.45;
                             }
-                        }
+                            const headerBlockH = headerLines.length > 0 ? 0.6 : 0;
+
+                            let cursorY = 0.78 + headerBlockH + 0.05;
+                            if (mTopic) {
+                                slide3.addShape(pptx.shapes.RECTANGLE, {
+                                    x: 0.4, y: cursorY, w: 9.2, h: 0.32, fill: 'FBEAEE', line: { color: 'A50034', width: 0.5 }
+                                });
+                                slide3.addText([
+                                    { text: '주요 논의 사항 : ', options: { bold: true, color: 'A50034' } },
+                                    { text: mTopic, options: { bold: true, color: '262626' } }
+                                ], {
+                                    x: 0.5, y: cursorY, w: 9.0, h: 0.32,
+                                    fontSize: 9.5, fontFace: 'Malgun Gothic', valign: 'middle'
+                                });
+                                cursorY += 0.42;
+                            }
+
+                            // 이슈 논의 및 주요 Comment 표 (첨부 참고 양식과 동일한 2단 표: 논의 내용 | F/up)
+                            const tableTop = cursorY + 0.06;
+                            const tableH = Math.max(2.6, 5.05 - tableTop);
+
+                            let issueCellLines = [];
+                            if (m.sections && m.sections.length > 0) {
+                                m.sections.forEach((sec, sIdx) => {
+                                    issueCellLines.push({ text: `${sIdx + 1}. ${sec.title || ''}\n`, options: { bold: true, fontSize: 9.5, color: '262626' } });
+                                    (sec.bullets || []).forEach(b => {
+                                        issueCellLines.push({ text: `-  ${b}\n`, options: { fontSize: 9, color: '404040' } });
+                                    });
+                                    issueCellLines.push({ text: '\n', options: { fontSize: 4 } });
+                                });
+                            } else {
+                                // sections 데이터가 없는 과거 저장 회의록은 정제된 본문 텍스트로 대체
+                                const cleanContent = cleanMarkdownForSlide(m.content);
+                                issueCellLines.push({ text: cleanContent, options: { fontSize: 9, color: '404040' } });
+                            }
+
+                            const actionList = (m.actionItemsList && m.actionItemsList.length > 0) ? m.actionItemsList : null;
+                            let fupCellLines = [];
+                            if (actionList) {
+                                actionList.forEach(ai => {
+                                    fupCellLines.push({ text: `→ [${ai.assignee || '담당자'}] ${ai.task || ''}\n`, options: { fontSize: 8.5, color: 'A50034', bold: true } });
+                                    if (ai.dueDate) fupCellLines.push({ text: `    (기한: ${ai.dueDate})\n`, options: { fontSize: 8, color: '888888' } });
+                                });
+                            } else {
+                                fupCellLines.push({ text: m.action || '후속 조치 사항 없음', options: { fontSize: 8.5, color: '888888' } });
+                            }
+
+                            slide3.addTable([
+                                [
+                                    { text: '이슈 논의 및 주요 Comment', options: { bold: true, fill: 'A50034', color: 'FFFFFF', align: 'center', fontSize: 9.5 } },
+                                    { text: 'F/up (Action Items)', options: { bold: true, fill: 'A50034', color: 'FFFFFF', align: 'center', fontSize: 9.5 } }
+                                ],
+                                [
+                                    { text: issueCellLines, options: { valign: 'top' } },
+                                    { text: fupCellLines, options: { valign: 'top' } }
+                                ]
+                            ], {
+                                x: 0.4, y: tableTop, w: 9.2,
+                                colW: [6.2, 3.0],
+                                rowH: [0.32, tableH - 0.32],
+                                border: { pt: 0.75, color: 'D9D9D9' },
+                                fontFace: 'Malgun Gothic', valign: 'top',
+                                autoPage: true,
+                                autoPageRepeatHeader: true,
+                                newSlideStartY: 0.9
+                            });
+                        });
                     }
 
                     // ─ 신규 슬라이드: 3. 현장 시각자료 AI 분석 보고서 (2개씩 배치) ─
