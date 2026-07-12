@@ -6925,7 +6925,7 @@ LG전자 B2B 해외 출장 일정에 따른 호텔 예약을 요청 드립니다
 2. 안건은 대화에서 실제로 논의된 주제 개수만큼 자연스럽게 나누십시오 (보통 2~5개). 각 안건 제목은 "1. 빌더 시장 공략을 위한 가전 제안 협력"처럼 핵심 내용이 드러나는 구체적인 제목으로 작성하고, 그 아래 2~4개의 구체적인 하위 bullet(각 "- "로 시작)을 작성하십시오.
 3. 마지막 안건 다음에는 반드시 "향후 실행 과제 (Action Items)" 섹션을 두고, 각 항목을 "→ [담당팀/담당자] 구체적인 실행 내용" 형식으로 작성하십시오.
 
-[회의록 markdownResult 작성 양식 — 반드시 이 형식을 그대로 따를 것]
+[참고 양식 — 아래 형식을 sections/actionItems 필드로 구조화할 것]
 ${subject || '(회의 제목 - 상대사명 및 논의 주제가 드러나도록)'}
 
 일시 : (실제 파싱된 날짜 및 요일, 시간) 또는 '${formattedDate}'
@@ -6949,7 +6949,7 @@ ${subject || '(회의 제목 - 상대사명 및 논의 주제가 드러나도록
 → [담당팀/담당자] (구체적 실행 내용 1)
 → [담당팀/담당자] (구체적 실행 내용 2)
 
-반드시 아래 JSON 스키마로만 응답하세요 (다른 설명, 인사말, 마크다운 코드펜스(triple backtick) 없이 순수 JSON 객체만 반환):
+반드시 아래 JSON 스키마로만 응답하세요 (다른 설명, 인사말, 마크다운 코드펜스(triple backtick) 없이 순수 JSON 객체만 반환). markdownResult 필드는 만들지 말고 구조화된 필드만 정확히 채우십시오:
 {
   "title": "회의 제목 (상대사명·주제가 드러나도록 구체적으로, 예: 'OO사 베트남 수주 연계 LG전자 B2B 가전 협업 방안 논의')",
   "date": "실제 파싱된 회의 일시(날짜+시간) 또는 '${formattedDate}'",
@@ -6964,9 +6964,44 @@ ${subject || '(회의 제목 - 상대사명 및 논의 주제가 드러나도록
   ],
   "actionItems": [
     { "task": "구체적인 실행 내용", "assignee": "담당팀/담당자", "dueDate": "기한(명시된 경우) 또는 빈 문자열" }
-  ],
-  "markdownResult": "위 [회의록 markdownResult 작성 양식]을 그대로 따른 최종 회의록 전문 (마크다운 기호 없이 위 양식의 줄바꿈/구조 그대로)"
+  ]
 }`;
+        }
+
+        /**
+         * Claude/Gemini가 반환한 구조화 필드(title/date/location/participants/mainTopic/sections/actionItems)를
+         * 바탕으로 markdownResult(최종 회의록 전문)를 코드로 직접 조립합니다.
+         * (AI가 markdownResult까지 함께 생성하도록 요청하면 출력 토큰이 커져 응답이 중간에 잘리는 경우가 있어,
+         *  구조화 필드만 받고 마크다운은 결정적으로 조립하는 방식으로 안정성을 높였다)
+         */
+        function buildMarkdownFromStructured(data) {
+            const lines = [];
+            lines.push(data.title || '회의록');
+            lines.push('');
+            lines.push(`일시 : ${data.date || ''}`);
+            lines.push(`장소 : ${data.location || ''}`);
+            lines.push(`참석자 : ${data.participants || ''}`);
+            lines.push('');
+            lines.push(`주요 논의 사항 : ${data.mainTopic || ''}`);
+            lines.push('');
+
+            if (data.sections && data.sections.length > 0) {
+                data.sections.forEach((sec, idx) => {
+                    lines.push(`${idx + 1}. ${sec.title || ''}`);
+                    (sec.bullets || []).forEach(b => lines.push(`- ${b}`));
+                    lines.push('');
+                });
+            }
+
+            if (data.actionItems && data.actionItems.length > 0) {
+                lines.push('향후 실행 과제 (Action Items)');
+                data.actionItems.forEach(ai => {
+                    const due = ai.dueDate ? ` (기한: ${ai.dueDate})` : '';
+                    lines.push(`→ [${ai.assignee || '담당자'}] ${ai.task || ''}${due}`);
+                });
+            }
+
+            return lines.join('\n').replace(/\n{3,}/g, '\n\n').trim();
         }
 
         // ── Claude API(Anthropic) 직접 호출을 통한 실 텍스트 기반 회의록 요약 ──
@@ -6984,7 +7019,7 @@ ${subject || '(회의 제목 - 상대사명 및 논의 주제가 드러나도록
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     model: 'claude-sonnet-4-6',
-                    max_tokens: 4000,
+                    max_tokens: 8000,
                     messages: [{ role: 'user', content: fullPrompt }]
                 })
             });
@@ -6995,6 +7030,13 @@ ${subject || '(회의 제목 - 상대사명 및 논의 주제가 드러나도록
             }
 
             const data = await response.json();
+
+            // 응답이 max_tokens 한도로 중간에 잘린 경우, JSON 파싱이 실패할 수 있으므로 미리 감지하여
+            // 명확한 오류로 알린다 (호출부에서 로컬 폴백으로 전환하는 판단에 도움이 됨)
+            if (data.stop_reason === 'max_tokens') {
+                console.warn('[MinutesAI] Claude 응답이 max_tokens 한도로 중간에 잘렸습니다.');
+            }
+
             const textBlocks = (data.content || [])
                 .filter(block => block.type === 'text' && block.text)
                 .map(block => block.text)
@@ -7011,11 +7053,21 @@ ${subject || '(회의 제목 - 상대사명 및 논의 주제가 드러나도록
                 const start = cleaned.indexOf('{');
                 const end = cleaned.lastIndexOf('}');
                 if (start >= 0 && end > start) {
-                    parsed = JSON.parse(cleaned.substring(start, end + 1));
+                    try {
+                        parsed = JSON.parse(cleaned.substring(start, end + 1));
+                    } catch (innerErr) {
+                        throw new Error(
+                            `Claude 응답 JSON 파싱 실패${data.stop_reason === 'max_tokens' ? ' (응답이 중간에 잘렸습니다)' : ''}: ${innerErr.message}`
+                        );
+                    }
                 } else {
-                    throw parseErr;
+                    throw new Error(`Claude 응답 JSON 파싱 실패: ${parseErr.message}`);
                 }
             }
+
+            // markdownResult는 AI가 생성하지 않고, 구조화된 필드로부터 코드로 결정적으로 조립한다
+            // (출력 토큰을 절약하고, 형식이 항상 일정하게 보장되도록 함)
+            parsed.markdownResult = buildMarkdownFromStructured(parsed);
             return parsed;
         }
 
@@ -7116,7 +7168,89 @@ ${subject || '(회의 제목 - 상대사명 및 논의 주제가 드러나도록
         }
 
         // ── 폴백: API Key 없을 때 로컬 파싱을 통한 3단 표준 마크다운 생성 ──
+        /**
+         * 이미 "1. 안건 / - 세부내용 / 향후 실행 과제" 형태로 잘 정리된 문서(대화체가 아닌 보고서/노트 형식)를
+         * 감지하여 직접 구조화한다. 대화(화자: 발언) 형식이 아닌 입력에 대해 buildFallbackMinutes의
+         * 화자 추정 로직을 억지로 적용하면 결과가 엉뚱하게 나오므로, 이 경우를 먼저 시도한다.
+         * 구조화된 문서로 판단되지 않으면 null을 반환하여 기존 대화체 파싱으로 넘어가게 한다.
+         */
+        function tryParseStructuredText(text, subject) {
+            const rawLines = text.split('\n').map(l => l.trim()).filter(Boolean);
+            if (rawLines.length === 0) return null;
+
+            const sectionHeaderRe = /^(\d+)[.\)]\s*(.+)/;
+            const bulletRe = /^[\*\-•·]\s*(.+)/;
+            const actionSectionRe = /(action\s*items?|후속\s*조치|실행\s*과제)/i;
+
+            // 번호가 붙은 안건이 최소 2개 이상 존재해야 "구조화된 문서"로 판단
+            const sectionCount = rawLines.filter(l => sectionHeaderRe.test(l)).length;
+            if (sectionCount < 2) return null;
+
+            let title = subject || '';
+            let startIdx = 0;
+            if (!sectionHeaderRe.test(rawLines[0]) && !bulletRe.test(rawLines[0])) {
+                title = title || rawLines[0];
+                startIdx = 1;
+            }
+
+            const sections = [];
+            const actionItems = [];
+            let currentSection = null;
+            let inActionSection = false;
+            let currentAssignee = '';
+
+            for (let i = startIdx; i < rawLines.length; i++) {
+                const line = rawLines[i];
+                const headerMatch = line.match(sectionHeaderRe);
+                const bulletMatch = line.match(bulletRe);
+
+                if (headerMatch) {
+                    const headerTitle = headerMatch[2].trim();
+                    inActionSection = actionSectionRe.test(headerTitle);
+                    currentAssignee = '';
+                    if (!inActionSection) {
+                        currentSection = { title: headerTitle, bullets: [] };
+                        sections.push(currentSection);
+                    } else {
+                        currentSection = null;
+                    }
+                } else if (bulletMatch) {
+                    const content = bulletMatch[1].trim();
+                    if (inActionSection) {
+                        actionItems.push({ task: content, assignee: currentAssignee || '담당자', dueDate: '' });
+                    } else if (currentSection) {
+                        currentSection.bullets.push(content);
+                    }
+                } else if (inActionSection) {
+                    // Action Items 섹션 내에서 불릿이 아닌 줄은 담당 조직/팀 이름(서브헤더)으로 간주
+                    currentAssignee = line;
+                } else if (currentSection) {
+                    // 불릿 기호 없이 이어지는 설명 줄은 직전 섹션의 세부 내용으로 포함
+                    currentSection.bullets.push(line);
+                }
+            }
+
+            if (sections.length === 0 && actionItems.length === 0) return null;
+
+            const parsedData = {
+                title: title || '회의록',
+                date: '',
+                location: '',
+                participants: '',
+                mainTopic: title || '',
+                sections,
+                decisions: sections.slice(0, 5).map(s => ({ topic: s.title, summary: (s.bullets[0] || s.title) })),
+                actionItems
+            };
+            parsedData.markdownResult = buildMarkdownFromStructured(parsedData);
+            return parsedData;
+        }
+
         function buildFallbackMinutes(text, subject) {
+            // 대화체가 아닌 이미 구조화된 문서(번호 안건 + 불릿)인 경우 먼저 직접 파싱을 시도한다.
+            const structured = tryParseStructuredText(text, subject);
+            if (structured) return structured;
+
             const tripInfo = JSON.parse(localStorage.getItem('LG_TRIP_INFO')) || DEFAULT_TRIP_INFO;
             const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
             
