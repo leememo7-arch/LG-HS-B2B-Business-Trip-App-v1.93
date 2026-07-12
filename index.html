@@ -649,27 +649,15 @@
                             텍스트 기반 분석</span>
                     </div>
 
-                    <!-- Gemini API Key 설정 (선택사항 · 접기/펼치기) — 3분 초과 음성 처리 및 대체 엔진용 -->
-                    <div class="bg-blue-50 border border-blue-200 rounded-xl p-3">
+                    <!-- 음성 인식 엔진 안내 (오픈소스 Whisper, API Key 불필요) -->
+                    <div class="bg-emerald-50 border border-emerald-200 rounded-xl p-3">
                         <div class="flex items-center gap-2">
-                            <i class="fa-solid fa-key text-blue-600 text-xs"></i>
-                            <span class="text-[10px] font-bold text-blue-800">Gemini API Key (선택, 긴 음성 처리용)</span>
-                            <div id="api-key-status" class="text-[9px] flex-1"></div>
-                            <button onclick="toggleApiKeySection()" id="api-key-toggle-btn"
-                                class="text-[10px] text-blue-600 underline font-semibold">입력하기</button>
+                            <i class="fa-solid fa-microchip text-emerald-600 text-xs"></i>
+                            <span class="text-[10px] font-bold text-emerald-800">음성 인식: 브라우저 내장 오픈소스 Whisper AI
+                                (API Key 불필요, 완전 무료)</span>
                         </div>
-                        <div id="api-key-section" class="hidden mt-2 space-y-1">
-                            <div class="flex gap-1.5">
-                                <input type="password" id="gemini-api-key-input" placeholder="AIza... API Key"
-                                    class="flex-1 text-[10px] px-2 py-1.5 border border-blue-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white">
-                                <button onclick="saveApiKey()"
-                                    class="bg-blue-600 text-white text-[10px] font-bold px-2.5 py-1.5 rounded-lg">저장</button>
-                                <button onclick="clearApiKey()"
-                                    class="bg-gray-200 text-gray-600 text-[10px] px-2 py-1.5 rounded-lg">초기화</button>
-                            </div>
-                            <p class="text-[9px] text-blue-500"><a href="https://aistudio.google.com/app/apikey"
-                                    target="_blank" class="underline">API Key 발급 →</a> (브라우저 로컬에만 저장)</p>
-                        </div>
+                        <p class="text-[9px] text-emerald-600 mt-1">음성 파일 업로드 시 브라우저에서 직접 실행되어 서버로 전송되지 않으며,
+                            최초 1회 인식 모델을 내려받은 뒤에는 오프라인으로도 동작합니다.</p>
                     </div>
 
                     <!-- 입력 방식 탭 -->
@@ -703,9 +691,8 @@
                                     .aac · .flac · .opus</p>
                                 <p class="text-[9px] text-green-600 font-semibold mt-1">★ 음성 파일은 실제 발화 내용을 텍스트로
                                     변환한 뒤, 전문 회의 기록 관리자 페르소나로 3단 구성 고품질 요약을 진행합니다</p>
-                                <p class="text-[9px] text-amber-600 font-semibold mt-0.5">※ API Key 없이 처리 시 모바일
-                                    브라우저 안정성을 위해 3분 이하 음성만 지원합니다. 더 긴 음성은 Gemini API
-                                    Key(무료) 등록 시 이용 가능합니다.</p>
+                                <p class="text-[9px] text-amber-600 font-semibold mt-0.5">※ 오픈소스 Whisper AI가 브라우저에서
+                                    직접 인식합니다 (API Key 불필요). 긴 음성은 다소 시간이 걸릴 수 있습니다.</p>
                             </div>
                             <!-- 선택된 파일 정보 (기본 숨김) -->
                             <div id="min-file-info" class="hidden items-center gap-3 text-left">
@@ -2315,9 +2302,6 @@
 
             // 드롭존 Drag & Drop 이벤트 활성화
             setupDropzone();
-
-            // 저장된 Gemini API Key 상태를 UI에 자동 표시
-            updateApiKeyStatus();
 
             // 이중 시계 시작 (한국 시간 + 출장지 시간)
             startDualClock();
@@ -6534,10 +6518,9 @@ LG전자 B2B 해외 출장 일정에 따른 호텔 예약을 요청 드립니다
         }
 
         // ── 경로 B: 음성 파일 업로드 처리 (실제 발화 내용을 텍스트로 변환 후 텍스트 탭으로 전달) ──
-        // Gemini API Key가 있으면 Gemini의 네이티브 음성 이해를 사용하고,
-        // 없으면 브라우저 내장 Whisper(transcribeAudioWithWhisper)로 실제 음성 인식을 수행한다.
+        // 오픈소스 Whisper(transformers.js, Web Worker 실행)로 API Key 없이 실제 음성 인식을 수행한다.
         // 변환된 텍스트는 #min-text-input에 채워지며, 이후 기존 텍스트 요약 파이프라인
-        // (startMinutesAnalysis → Claude → Gemini → 로컬)이 그대로 이어서 처리한다.
+        // (startMinutesAnalysis → Claude → 로컬)이 그대로 이어서 처리한다.
         async function handleMinutesAudioFileUpload(file) {
             minutesSelectedFile = file;
 
@@ -6560,88 +6543,48 @@ LG전자 B2B 해외 출장 일정에 따른 호텔 예약을 요청 드립니다
                 const durationStr = durationSec > 0 ? formatTimestamp(durationSec) : '알 수 없음';
                 if (detailText) {
                     detailText.textContent = `파일: ${file.name} (${fileSizeStr}) | 길이: ${durationStr}` +
-                        (durationSec > 600 ? ' — 긴 음성이라 다소 시간이 걸릴 수 있습니다.' : '');
+                        (durationSec > 300 ? ' — 음성이 길어 다소 시간이 걸릴 수 있습니다.' : '');
                 }
 
-                const apiKey = localStorage.getItem('GEMINI_API_KEY');
                 let transcript = '';
 
-                // 모바일 브라우저(Safari/Chrome)에서 실제 확인된 문제: API Key 없이 브라우저 자체에서
-                // 긴 음성을 처리하면 오디오 디코딩 + WASM 음성인식 모델 로딩이 겹치면서 메모리 부족으로
-                // 앱(탭)이 강제 종료("재부팅")될 수 있다. 따라서 API Key가 없을 때는 브라우저 자체 처리를
-                // 짧은 음성(3분 이하)으로만 제한하고, 그보다 길면 Gemini API Key 등록을 안내한다.
-                const BROWSER_WHISPER_MAX_SEC = 180;
+                // ── 브라우저 내장 Whisper(오픈소스, xenova/whisper-web과 동일 방식)로 실제 음성 인식 ──
+                // Web Worker에서 실행되어 API Key나 서버 없이도 완전 무료로 동작한다.
+                if (statusText) statusText.textContent = '🎙️ 브라우저 내장 AI(Whisper)로 실제 음성 인식 준비 중...';
+                if (progressBar) progressBar.style.width = '15%';
+                if (progressPercent) progressPercent.textContent = '15%';
 
-                if (!apiKey && durationSec > BROWSER_WHISPER_MAX_SEC) {
-                    if (progressContainer) progressContainer.classList.add('hidden');
-                    document.getElementById('dropzone-default').classList.remove('hidden');
-                    const fileInputEl = document.getElementById('audio-file-input');
-                    if (fileInputEl) fileInputEl.value = '';
-
-                    const openKeySettings = window.confirm(
-                        `⚠️ 이 음성 파일은 ${durationStr} 분량입니다.\n\n` +
-                        `3분을 초과하는 음성은 모바일 브라우저(Safari/Chrome)에서 메모리 부족으로 앱이 ` +
-                        `강제 종료(재부팅)될 수 있어, API Key 없는 브라우저 자체 처리는 지원하지 않습니다.\n\n` +
-                        `Gemini API Key를 등록하시면 서버에서 안전하게 처리되어 이런 문제가 없습니다. (무료 발급 가능)\n\n` +
-                        `[확인] → API Key 등록 화면 열기\n` +
-                        `[취소] → 업로드 취소`
-                    );
-                    if (openKeySettings) {
-                        const section = document.getElementById('api-key-section');
-                        if (section && section.classList.contains('hidden')) {
-                            toggleApiKeySection();
-                        }
-                        const keyInput = document.getElementById('gemini-api-key-input');
-                        if (keyInput) keyInput.focus();
+                const whisperResult = await transcribeAudioWithWhisper(file, (p) => {
+                    if (p && p.status === 'progress' && p.file) {
+                        if (statusText) statusText.textContent = `🎙️ 음성 인식 모델 다운로드 중... (최초 1회, ${p.file})`;
+                        const pct = 15 + Math.round((p.progress || 0) * 0.35); // 15~50%
+                        const clamped = Math.min(Math.max(pct, 15), 50);
+                        if (progressBar) progressBar.style.width = `${clamped}%`;
+                        if (progressPercent) progressPercent.textContent = `${clamped}%`;
+                    } else if (p && p.status === 'decoding') {
+                        if (statusText) statusText.textContent = '🎙️ 오디오 디코딩 중...';
+                    } else if (p && p.status === 'transcribing') {
+                        if (statusText) statusText.textContent = '🎙️ 실제 발화 내용을 텍스트로 변환 중... (음성 길이에 따라 다소 소요될 수 있습니다)';
+                        if (progressBar) progressBar.style.width = '55%';
+                        if (progressPercent) progressPercent.textContent = '55%';
+                    } else if (p && p.status === 'transcribing-segment') {
+                        const segNum = p.segmentIndex + 1;
+                        const segTotal = p.segmentCount;
+                        if (statusText) statusText.textContent = `🎙️ 음성 구간 인식 중... (${segNum}/${segTotal} 구간)`;
+                        const pct = 55 + Math.round(((segNum - 1) / Math.max(segTotal, 1)) * 35); // 55~90%
+                        const clamped = Math.min(Math.max(pct, 55), 90);
+                        if (progressBar) progressBar.style.width = `${clamped}%`;
+                        if (progressPercent) progressPercent.textContent = `${clamped}%`;
                     }
-                    return;
-                }
-
-                if (apiKey) {
-                    // ── Gemini 네이티브 음성 이해 (API Key 있을 때, 가장 정확하고 브라우저 메모리 부담 없음) ──
-                    if (statusText) statusText.textContent = 'Gemini AI가 음성을 실제로 분석 중...';
-                    if (progressBar) progressBar.style.width = '40%';
-                    if (progressPercent) progressPercent.textContent = '40%';
-                    const tripInfo = JSON.parse(localStorage.getItem('LG_TRIP_INFO')) || DEFAULT_TRIP_INFO;
-                    transcript = await analyzeAudioWithGemini(file, apiKey, tripInfo);
-                } else {
-                    // ── 브라우저 내장 Whisper로 실제 음성 인식 (API Key 불필요, 3분 이하 음성만 해당) ──
-                    if (statusText) statusText.textContent = '🎙️ 브라우저 내장 AI(Whisper)로 실제 음성 인식 준비 중...';
-                    if (progressBar) progressBar.style.width = '15%';
-                    if (progressPercent) progressPercent.textContent = '15%';
-
-                    const whisperResult = await transcribeAudioWithWhisper(file, (p) => {
-                        if (p && p.status === 'progress' && p.file) {
-                            if (statusText) statusText.textContent = `🎙️ 음성 인식 모델 다운로드 중... (최초 1회, ${p.file})`;
-                            const pct = 15 + Math.round((p.progress || 0) * 0.35); // 15~50%
-                            const clamped = Math.min(Math.max(pct, 15), 50);
-                            if (progressBar) progressBar.style.width = `${clamped}%`;
-                            if (progressPercent) progressPercent.textContent = `${clamped}%`;
-                        } else if (p && p.status === 'decoding') {
-                            if (statusText) statusText.textContent = '🎙️ 오디오 디코딩 중...';
-                        } else if (p && p.status === 'transcribing') {
-                            if (statusText) statusText.textContent = '🎙️ 실제 발화 내용을 텍스트로 변환 중... (음성 길이에 따라 다소 소요될 수 있습니다)';
-                            if (progressBar) progressBar.style.width = '55%';
-                            if (progressPercent) progressPercent.textContent = '55%';
-                        } else if (p && p.status === 'transcribing-segment') {
-                            const segNum = p.segmentIndex + 1;
-                            const segTotal = p.segmentCount;
-                            if (statusText) statusText.textContent = `🎙️ 음성 구간 인식 중... (${segNum}/${segTotal} 구간)`;
-                            const pct = 55 + Math.round(((segNum - 1) / Math.max(segTotal, 1)) * 35); // 55~90%
-                            const clamped = Math.min(Math.max(pct, 55), 90);
-                            if (progressBar) progressBar.style.width = `${clamped}%`;
-                            if (progressPercent) progressPercent.textContent = `${clamped}%`;
-                        }
-                    });
-                    transcript = whisperResult.transcript;
-                }
+                });
+                transcript = whisperResult.transcript;
 
                 if (progressBar) progressBar.style.width = '90%';
                 if (progressPercent) progressPercent.textContent = '90%';
                 if (statusText) statusText.textContent = '음성 인식 완료! 회의록 입력창으로 옮기는 중...';
 
                 // 인식된 실제 내용을 텍스트 입력창에 채워, 검토/수정 후 '분석 시작'을 누르면
-                // 기존 텍스트 요약 파이프라인(Claude → Gemini → 로컬)이 그대로 이어서 처리한다.
+                // 기존 텍스트 요약 파이프라인(Claude → 로컬)이 그대로 이어서 처리한다.
                 const textInput = document.getElementById('min-text-input');
                 if (textInput) {
                     textInput.value = transcript;
@@ -6665,7 +6608,7 @@ LG전자 B2B 해외 출장 일정에 따른 호텔 예약을 요청 드립니다
 
             } catch (err) {
                 console.error('[MinutesAudio] 음성 인식 오류:', err);
-                alert(`⚠️ 음성 인식 중 오류가 발생했습니다.\n\n오류: ${err.message}\n\n💡 Gemini API Key를 등록하시면 더 안정적으로 음성 분석이 가능합니다.`);
+                alert(`⚠️ 음성 인식 중 오류가 발생했습니다.\n\n오류: ${err.message}\n\n💡 파일 형식을 변환(mp3/wav)해서 다시 시도하거나, 더 짧은 음성으로 나눠서 시도해보세요.`);
                 if (progressContainer) progressContainer.classList.add('hidden');
                 document.getElementById('dropzone-default').classList.remove('hidden');
                 const fileInputEl = document.getElementById('audio-file-input');
@@ -6908,56 +6851,17 @@ LG전자 B2B 해외 출장 일정에 따른 호텔 예약을 요청 드립니다
             descEl.textContent = '회의 대화 전체 텍스트의 맥락과 세부 정보를 바탕으로 3단 구성 회의록을 구조화하고 있습니다.';
 
             try {
-                const apiKey = localStorage.getItem("GEMINI_API_KEY");
                 let aiResult;
                 let usedEngine = '';
 
-                let intermediateSummary = '';
-
-                // ── B-1: Claude API 직접 호출 (Claude.ai 아티팩트 환경에서는 API Key 없이 즉시 동작) ──
+                // ── Claude API 직접 호출 (Claude.ai 아티팩트 환경에서는 API Key 없이 즉시 동작) ──
                 // 텍스트 기반 실제 회의 내용을 바탕으로 1회 호출로 3단 구성 회의록을 구조화한다.
                 try {
                     aiResult = await structureMinutesWithClaude(translatedText, subject, speakers, style, custom);
                     usedEngine = 'claude';
                 } catch (claudeErr) {
-                    console.warn('[MinutesAI] Claude API 요약 실패, 대체 경로로 전환:', claudeErr);
-
-                    if (apiKey) {
-                        // ── B-2: Gemini API 직접 호출을 통한 2단계 요약 (사용자가 자체 API Key를 등록한 경우) ──
-                        updateMinutesStep('stt', 'active');
-                        titleEl.textContent = '1단계: 대화 내용 상세 요약 중... (Gemini)';
-                        descEl.textContent = '회의 대화 전체 텍스트의 맥락과 세부 정보를 누락 없이 1차 상세 요약하고 있습니다.';
-
-                        const firstStagePrompt = `당신은 전문적인 회의 기록 관리자입니다. 제공된 회의 대화 내용을 분석하여 회의의 세부 맥락, 대화 흐름, 제품별 논의 사항 및 결정사항을 빠짐없이 상세하게 요약해 주세요. 이 요약은 2차 요약의 기초 자료로 활용되므로 정보가 누락되지 않아야 합니다.\n\n[회의 대화 내용]\n${translatedText}`;
-                        const geminiRes1 = await fetch(
-                            `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
-                            {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({
-                                    contents: [{ parts: [{ text: firstStagePrompt }] }]
-                                })
-                            }
-                        );
-                        if (!geminiRes1.ok) throw new Error(`Gemini API 1단계 요약 오류: ${geminiRes1.status}`);
-                        const geminiData1 = await geminiRes1.json();
-                        intermediateSummary = geminiData1.candidates?.[0]?.content?.parts?.[0]?.text || '';
-
-                        // 2단계: 핵심 정제 및 최종 3단 회의록 구조화
-                        updateMinutesStep('stt', 'done');
-                        updateMinutesStep('summary', 'active');
-                        titleEl.textContent = '2단계: 핵심 정제 및 최종 3단 회의록 구조화 중... (Gemini)';
-                        descEl.textContent = '1차 요약본을 바탕으로 중복을 제거하고 핵심만 한번 더 요약하여 가독성 높은 회의록으로 구조화합니다.';
-
-                        let finalCustomPrompt = custom || '';
-                        finalCustomPrompt += `\n[회의 2차 요약 지침]\n제공된 텍스트는 1차 상세 요약본입니다. 이 내용을 바탕으로 중복을 배제하고 핵심 결정사항 위주로 한번 더 압축 요약하여 최종 3단 구성 회의록을 작성해 주십시오.`;
-
-                        aiResult = await structureMinutesWithGemini(intermediateSummary, subject, speakers, style, finalCustomPrompt, apiKey);
-                        usedEngine = 'gemini';
-                    } else {
-                        // API Key가 없고 Claude 호출도 실패한 경우 → 상위 catch에서 로컬 폴백으로 전환
-                        throw claudeErr;
-                    }
+                    console.warn('[MinutesAI] Claude API 요약 실패, 로컬 폴백으로 전환:', claudeErr);
+                    throw claudeErr; // 상위 catch에서 로컬 폴백(buildFallbackMinutes)으로 전환
                 }
 
                 updateMinutesStep('stt', 'done');
@@ -7732,58 +7636,8 @@ ${actionTable}`;
         }
 
         // ─────────────────────────────────────────────────────────────
-        // [ Gemini API Key 관리 함수들 ]
+        // [ Gemini API Key 관리 함수 제거됨 — 음성 인식은 오픈소스 Whisper(Web Worker)만 사용 ]
         // ─────────────────────────────────────────────────────────────
-
-        // API Key 섹션 토글
-        function toggleApiKeySection() {
-            const section = document.getElementById("api-key-section");
-            const btn = document.getElementById("api-key-toggle-btn");
-            const isHidden = section.classList.contains("hidden");
-            section.classList.toggle("hidden");
-            btn.textContent = isHidden ? "닫기" : "입력하기";
-            if (isHidden) {
-                const savedKey = localStorage.getItem("GEMINI_API_KEY") || "";
-                document.getElementById("gemini-api-key-input").value = savedKey;
-            }
-            updateApiKeyStatus();
-        }
-
-        // API Key 저장
-        function saveApiKey() {
-            const key = document.getElementById("gemini-api-key-input").value.trim();
-            if (!key) {
-                alert("API Key를 입력해 주세요.");
-                return;
-            }
-            localStorage.setItem("GEMINI_API_KEY", key);
-            document.getElementById("api-key-section").classList.add("hidden");
-            document.getElementById("api-key-toggle-btn").textContent = "수정";
-            updateApiKeyStatus();
-            alert("✅ Gemini API Key가 저장되었습니다.\n이제 음성 파일 업로드 시 실제 AI 분석이 활성화됩니다.");
-        }
-
-        // API Key 초기화
-        function clearApiKey() {
-            localStorage.removeItem("GEMINI_API_KEY");
-            document.getElementById("gemini-api-key-input").value = "";
-            updateApiKeyStatus();
-            alert("API Key가 초기화되었습니다.");
-        }
-
-        // API Key 상태 표시 업데이트
-        function updateApiKeyStatus() {
-            const key = localStorage.getItem("GEMINI_API_KEY");
-            const statusEl = document.getElementById("api-key-status");
-            const toggleBtn = document.getElementById("api-key-toggle-btn");
-            if (key) {
-                statusEl.innerHTML = `<span class="text-green-600 font-semibold">✓ API Key 등록됨 (AI 음성 분석 활성화)</span>`;
-                toggleBtn.textContent = "수정";
-            } else {
-                statusEl.innerHTML = `<span class="text-gray-400">API Key 미설정 — 음성 파일 구조 분석 모드로 동작</span>`;
-                toggleBtn.textContent = "입력하기";
-            }
-        }
 
         // ─────────────────────────────────────────────────────────────
         // [ 음성 파일 길이(초) 비동기 추출 — Web Audio API 활용 ]
@@ -8177,8 +8031,6 @@ ${actionTable}`;
         //  서버나 API Key 없이도 실제 발화 내용을 텍스트로 변환한다)
         // ─────────────────────────────────────────────────────────────
 
-        const _whisperTranscriberCache = {};
-
         /**
          * 오디오 파일을 Whisper 입력 규격(16kHz, mono, Float32Array)으로 디코딩합니다.
          * 1차: AudioContext.decodeAudioData (빠르고 메모리 효율적, M4A/AAC 포함 대부분의 포맷 지원)
@@ -8352,9 +8204,101 @@ ${actionTable}`;
         }
 
         /**
-         * Transformers.js Whisper 파이프라인을 (모델별로 최초 1회) 로드합니다.
-         * CDN에서 모델을 내려받아 브라우저 내에서 WASM/WebGPU로 직접 추론하므로
-         * API Key나 서버 없이도 실제 음성 인식이 가능하다.
+        /**
+         * 음성 인식(Whisper)을 별도의 Web Worker에서 실행하기 위한 헬퍼.
+         * (참고: Hugging Face의 공식 오픈소스 레퍼런스인 xenova/whisper-web 프로젝트와 동일하게
+         *  Transformers.js 추론을 메인 스레드가 아닌 Worker에서 수행한다.
+         *  https://github.com/xenova/whisper-web)
+         * 이렇게 하면 무거운 연산이 화면 렌더링을 막지 않고, 브라우저가 Worker의 메모리를
+         * 메인 페이지와 분리해서 관리할 수 있어 모바일에서 훨씬 안정적으로 동작한다.
+         */
+        let _whisperWorker = null;
+        let _whisperWorkerMsgId = 0;
+
+        function getWhisperWorker() {
+            if (_whisperWorker) return _whisperWorker;
+
+            const workerSource = `
+                let transcriber = null;
+                let currentModelId = null;
+
+                self.onmessage = async (e) => {
+                    const { id, audioData, modelId } = e.data;
+                    try {
+                        if (!transcriber || currentModelId !== modelId) {
+                            const { pipeline } = await import('https://cdn.jsdelivr.net/npm/@huggingface/transformers@4.2.0');
+                            transcriber = await pipeline('automatic-speech-recognition', modelId, {
+                                dtype: 'q8',
+                                progress_callback: (data) => {
+                                    self.postMessage({ id, type: 'progress', data });
+                                }
+                            });
+                            currentModelId = modelId;
+                        }
+                        const result = await transcriber(new Float32Array(audioData), {
+                            chunk_length_s: 30,
+                            stride_length_s: 5,
+                            return_timestamps: true
+                        });
+                        self.postMessage({ id, type: 'done', result });
+                    } catch (err) {
+                        self.postMessage({ id, type: 'error', message: (err && err.message) ? err.message : String(err) });
+                    }
+                };
+            `;
+
+            const blob = new Blob([workerSource], { type: 'text/javascript' });
+            const url = URL.createObjectURL(blob);
+            _whisperWorker = new Worker(url, { type: 'module' });
+            return _whisperWorker;
+        }
+
+        // Worker에게 한 구간(segment)의 오디오 인식을 요청하고 결과를 기다린다.
+        function transcribeSegmentInWorker(audioData, modelId, onProgress) {
+            return new Promise((resolve, reject) => {
+                let worker;
+                try {
+                    worker = getWhisperWorker();
+                } catch (err) {
+                    reject(err);
+                    return;
+                }
+
+                const id = ++_whisperWorkerMsgId;
+
+                const handleMessage = (e) => {
+                    const msg = e.data;
+                    if (!msg || msg.id !== id) return;
+                    if (msg.type === 'progress') {
+                        if (typeof onProgress === 'function') onProgress(msg.data);
+                    } else if (msg.type === 'done') {
+                        worker.removeEventListener('message', handleMessage);
+                        resolve(msg.result);
+                    } else if (msg.type === 'error') {
+                        worker.removeEventListener('message', handleMessage);
+                        reject(new Error(msg.message));
+                    }
+                };
+                const handleError = (err) => {
+                    worker.removeEventListener('message', handleMessage);
+                    reject(new Error('음성 인식 Worker 실행 중 오류: ' + (err.message || err)));
+                };
+
+                worker.addEventListener('message', handleMessage);
+                worker.addEventListener('error', handleError, { once: true });
+
+                // Float32Array의 버퍼를 Transferable로 전송하여 복사 비용을 최소화한다
+                // (전송 후 원본 audioData는 더 이상 사용하지 않아야 함)
+                const buffer = audioData.buffer.slice(audioData.byteOffset, audioData.byteOffset + audioData.byteLength);
+                worker.postMessage({ id, audioData: buffer, modelId }, [buffer]);
+            });
+        }
+
+        const _whisperTranscriberCache = {};
+
+        /**
+         * (폴백용) 메인 스레드에서 직접 Transformers.js Whisper 파이프라인을 로드합니다.
+         * Web Worker를 사용할 수 없는 구형 브라우저에서만 사용된다.
          */
         async function getWhisperTranscriber(onProgress, modelId = 'onnx-community/whisper-base') {
             if (_whisperTranscriberCache[modelId]) return _whisperTranscriberCache[modelId];
@@ -8385,11 +8329,10 @@ ${actionTable}`;
         }
 
         /**
-         * 음성 파일을 브라우저에서 직접 실제 텍스트로 변환합니다 (Gemini API Key 불필요).
-         * 긴 음성은 1분 단위로 순차적으로 나누어 처리하여
-         * 모바일 등 메모리 제약이 큰 환경에서도 브라우저가 강제 종료되지 않도록 한다.
-         * (실제 호출부(handleMinutesAudioFileUpload)에서는 API Key가 없을 때 3분 이하 음성에만
-         *  이 함수를 사용하도록 상한을 두고 있다.)
+         * 음성 파일을 브라우저에서 직접 실제 텍스트로 변환합니다 (API Key 불필요, 완전 무료·오프라인 처리).
+         * xenova/whisper-web(오픈소스, MIT 라이선스)과 동일한 방식으로 Web Worker에서 실행되어
+         * 화면이 멈추지 않고, 긴 음성은 1분 단위로 순차적으로 나누어 처리하여
+         * 모바일 등 메모리 제약이 큰 환경에서도 안정적으로 동작하도록 한다.
          * 반환값: 인식된 실제 발화 텍스트(transcript)
          */
         async function transcribeAudioWithWhisper(file, onProgress) {
@@ -8400,7 +8343,17 @@ ${actionTable}`;
             // 매우 긴 음성은 더 작고 가벼운 모델을 사용해 메모리/처리 부담을 낮춤
             const modelId = durationSec > 600 ? 'onnx-community/whisper-tiny' : 'onnx-community/whisper-base';
 
-            const transcriber = await getWhisperTranscriber(onProgress, modelId);
+            // Worker 사용 가능 여부 사전 확인 (모듈 워커 미지원 구형 브라우저 대비)
+            const canUseWorker = typeof Worker !== 'undefined';
+
+            if (canUseWorker) {
+                try {
+                    // 워커가 준비되는지(모델 로딩 시작) 가볍게 확인
+                    getWhisperWorker();
+                } catch (workerInitErr) {
+                    console.warn('[Whisper] Web Worker 생성 실패, 메인 스레드 방식으로 대체합니다:', workerInitErr);
+                }
+            }
 
             if (typeof onProgress === 'function') onProgress({ status: 'transcribing' });
 
@@ -8419,6 +8372,9 @@ ${actionTable}`;
                 }
             }
 
+            // 메인 스레드 폴백용 트랜스크라이버 (Worker 실행이 실패할 경우에만 로드됨)
+            let fallbackTranscriber = null;
+
             const transcriptParts = [];
             for (let i = 0; i < segments.length; i++) {
                 if (typeof onProgress === 'function') {
@@ -8429,11 +8385,27 @@ ${actionTable}`;
                     // 반드시 활성화해야 한다. Whisper의 청크 스티칭(이어붙이기) 알고리즘은 내부적으로
                     // 타임스탬프 토큰을 이용해 겹치는 구간을 정렬하는데, 꺼두면 스티칭이 제대로 되지
                     // 않아 일부 구간만 반환되거나 오류가 발생할 수 있다.
-                    const result = await transcriber(segments[i], {
-                        chunk_length_s: 30,
-                        stride_length_s: 5,
-                        return_timestamps: true
-                    });
+                    let result;
+                    // 세그먼트 데이터를 복사해서 넘김 (Transferable 전송 시 원본이 detach되므로
+                    // 이후 세그먼트의 subarray 접근에 영향이 없도록 별도 복사본 사용)
+                    const segCopy = new Float32Array(segments[i]);
+
+                    if (canUseWorker && _whisperWorker !== null) {
+                        try {
+                            result = await transcribeSegmentInWorker(segCopy, modelId, onProgress);
+                        } catch (workerErr) {
+                            console.warn(`[Whisper] Worker 인식 실패(구간 ${i + 1}), 메인 스레드로 재시도:`, workerErr);
+                            if (!fallbackTranscriber) fallbackTranscriber = await getWhisperTranscriber(onProgress, modelId);
+                            result = await fallbackTranscriber(segCopy, {
+                                chunk_length_s: 30, stride_length_s: 5, return_timestamps: true
+                            });
+                        }
+                    } else {
+                        if (!fallbackTranscriber) fallbackTranscriber = await getWhisperTranscriber(onProgress, modelId);
+                        result = await fallbackTranscriber(segCopy, {
+                            chunk_length_s: 30, stride_length_s: 5, return_timestamps: true
+                        });
+                    }
 
                     let segText = '';
                     if (result) {
